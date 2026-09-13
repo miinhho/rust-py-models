@@ -1,7 +1,46 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as Tokens;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, LitStr};
+use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, LitBool, LitStr, Token};
+
+#[derive(Clone, Copy, Default)]
+struct DataclassOptions {
+    frozen: Option<bool>,
+    slots: Option<bool>,
+    kw_only: Option<bool>,
+}
+
+impl DataclassOptions {
+    fn is_set(self) -> bool {
+        self.frozen.is_some() || self.slots.is_some() || self.kw_only.is_some()
+    }
+
+    fn with_overrides(self, overrides: Self) -> Self {
+        Self {
+            frozen: overrides.frozen.or(self.frozen),
+            slots: overrides.slots.or(self.slots),
+            kw_only: overrides.kw_only.or(self.kw_only),
+        }
+    }
+
+    fn decorator(self) -> String {
+        let mut args = Vec::new();
+        for (name, value) in [
+            ("frozen", self.frozen),
+            ("slots", self.slots),
+            ("kw_only", self.kw_only),
+        ] {
+            if let Some(value) = value {
+                args.push(format!("{name}={}", if value { "True" } else { "False" }));
+            }
+        }
+        if args.is_empty() {
+            "@dataclass".into()
+        } else {
+            format!("@dataclass({})", args.join(", "))
+        }
+    }
+}
 
 #[derive(Default)]
 struct Options {
@@ -9,6 +48,15 @@ struct Options {
     skip: bool,
     export: bool,
     export_to: Option<String>,
+    dataclass: DataclassOptions,
+}
+
+fn bool_option(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<bool> {
+    if meta.input.peek(Token![=]) {
+        Ok(meta.value()?.parse::<LitBool>()?.value())
+    } else {
+        Ok(true)
+    }
 }
 
 fn options(attrs: &[Attribute]) -> syn::Result<Options> {
@@ -23,6 +71,12 @@ fn options(attrs: &[Attribute]) -> syn::Result<Options> {
                 out.export = true;
             } else if meta.path.is_ident("export_to") {
                 out.export_to = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("frozen") {
+                out.dataclass.frozen = Some(bool_option(&meta)?);
+            } else if meta.path.is_ident("slots") {
+                out.dataclass.slots = Some(bool_option(&meta)?);
+            } else if meta.path.is_ident("kw_only") {
+                out.dataclass.kw_only = Some(bool_option(&meta)?);
             } else {
                 return Err(meta.error("unsupported #[py(...)] option"));
             }
@@ -101,10 +155,10 @@ fn fields(fields: &Fields) -> syn::Result<(Vec<Tokens>, Vec<Tokens>, bool)> {
     let mut names = std::collections::HashSet::new();
     for (index, field) in fields.iter().enumerate() {
         let attr = options(&field.attrs)?;
-        if attr.export || attr.export_to.is_some() {
+        if attr.export || attr.export_to.is_some() || attr.dataclass.is_set() {
             return Err(syn::Error::new_spanned(
                 field,
-                "export options belong on the struct or enum",
+                "dataclass and export options belong on the struct or enum variant",
             ));
         }
         if attr.skip {
@@ -169,6 +223,7 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
     }
     let ident = input.ident;
     let attr = options(&input.attrs)?;
+    let dataclass = attr.dataclass;
     if attr.skip {
         return Err(syn::Error::new(
             ident.span(),
@@ -182,6 +237,7 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
     let mut local_names = vec![name.clone()];
     let (prelude, declaration) = match input.data {
         Data::Struct(data) => {
+            let decorator = dataclass.decorator();
             let (lines, field_deps, empty) = fields(&data.fields)?;
             deps.extend(field_deps);
             let pass = if empty {
@@ -192,7 +248,7 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
             (
                 quote! { String::from("from dataclasses import dataclass\n") },
                 quote! {
-                    let mut out = format!("@dataclass\nclass {}:\n", #name);
+                    let mut out = format!("{}\nclass {}:\n", #decorator, #name);
                     #(#lines)*
                     #pass
                     out
@@ -206,6 +262,12 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
                 .iter()
                 .filter(|v| options(&v.attrs).map(|o| !o.skip).unwrap_or(true))
                 .all(|v| matches!(v.fields, Fields::Unit));
+            if all_unit && dataclass.is_set() {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    "dataclass options do not apply to a unit enum",
+                ));
+            }
             for variant in &data.variants {
                 let vattr = options(&variant.attrs)?;
                 if vattr.export || vattr.export_to.is_some() {
@@ -217,6 +279,13 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
                 if vattr.skip {
                     continue;
                 }
+                if all_unit && vattr.dataclass.is_set() {
+                    return Err(syn::Error::new_spanned(
+                        variant,
+                        "dataclass options do not apply to a unit enum",
+                    ));
+                }
+                let variant_decorator = dataclass.with_overrides(vattr.dataclass).decorator();
                 let variant_ident = variant
                     .ident
                     .to_string()
@@ -257,7 +326,7 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
                     }
                     deps.extend(field_deps);
                     variants.push(quote! {
-                        out.push_str(&format!("@dataclass\nclass {}:\n    kind: Literal[{}] = field(default={}, init=False)\n", #class_name, #value_literal, #value_literal));
+                        out.push_str(&format!("{}\nclass {}:\n    kind: Literal[{}] = field(default={}, init=False)\n", #variant_decorator, #class_name, #value_literal, #value_literal));
                         #(#lines)*
                         out.push('\n');
                     });
@@ -336,4 +405,32 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
         }
         #test
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_dataclass_options_on_unit_enums() {
+        let input: DeriveInput = syn::parse_quote! {
+            #[py(frozen)]
+            enum Status { Active }
+        };
+        assert!(expand(input)
+            .unwrap_err()
+            .to_string()
+            .contains("dataclass options do not apply to a unit enum"));
+    }
+
+    #[test]
+    fn rejects_dataclass_options_on_fields() {
+        let input: DeriveInput = syn::parse_quote! {
+            struct User { #[py(slots)] id: u64 }
+        };
+        assert!(expand(input)
+            .unwrap_err()
+            .to_string()
+            .contains("dataclass and export options belong"));
+    }
 }

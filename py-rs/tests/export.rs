@@ -72,6 +72,23 @@ struct ZeroArray {
 }
 
 #[derive(PY)]
+#[py(export, frozen, slots = true, kw_only)]
+struct ImmutableUser {
+    id: u64,
+    name: String,
+}
+
+#[derive(PY)]
+#[py(export, frozen, slots, kw_only)]
+enum AuditEvent {
+    Created {
+        id: u64,
+    },
+    #[py(frozen = false, slots = false, kw_only = false)]
+    Mutable(String),
+}
+
+#[derive(PY)]
 #[allow(non_camel_case_types)]
 enum RawVariant {
     r#type,
@@ -146,6 +163,12 @@ fn generated_declarations_and_dependencies() {
     assert_eq!(Left::dependencies().len(), 1);
     assert_eq!(Right::dependencies().len(), 1);
     assert!(ZeroArray::decl().contains("empty: tuple[()]"));
+    assert!(ImmutableUser::decl().contains("@dataclass(frozen=True, slots=True, kw_only=True)"));
+    let audit = AuditEvent::decl();
+    assert!(audit
+        .contains("@dataclass(frozen=True, slots=True, kw_only=True)\nclass AuditEventCreated"));
+    assert!(audit
+        .contains("@dataclass(frozen=False, slots=False, kw_only=False)\nclass AuditEventMutable"));
     assert!(RawVariant::decl().contains("type = \"type\""));
 }
 
