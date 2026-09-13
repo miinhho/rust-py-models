@@ -65,6 +65,10 @@ impl From<std::io::Error> for ExportError {
 pub trait PY: 'static {
     fn name() -> String;
     fn inline() -> String;
+    /// Python imports needed by this type's own declaration.
+    fn prelude() -> String {
+        String::new()
+    }
     fn decl() -> String {
         String::new()
     }
@@ -266,7 +270,8 @@ fn export_one<T: PY>(dir: &Path) -> Result<(), ExportError> {
 fn render<T: PY>() -> Result<String, ExportError> {
     let own = T::output_path().ok_or(ExportError::NotExportable(std::any::type_name::<T>()))?;
     validate_path(&own)?;
-    let mut imports: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut eager_imports: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut cyclic_imports: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut names: HashMap<String, TypeId> = T::declaration_names()
         .into_iter()
         .map(|name| (name, TypeId::of::<T>()))
@@ -305,21 +310,53 @@ fn render<T: PY>() -> Result<String, ExportError> {
             module.push('.');
         }
         module.push_str(&dep.path.file_stem().unwrap().to_string_lossy());
+        let imports = if reaches_type(&dep, TypeId::of::<T>(), &mut HashSet::new()) {
+            &mut cyclic_imports
+        } else {
+            &mut eager_imports
+        };
         imports.entry(module).or_default().insert(dep.name);
     }
     let mut out = format!(
         "{HEADER}# Rust type: {}\nfrom __future__ import annotations\n\n",
         std::any::type_name::<T>()
     );
-    out.push_str(&T::decl());
-    out.push('\n');
-    for (module, names) in imports {
+    out.push_str(&T::prelude());
+    if !eager_imports.is_empty() {
+        out.push('\n');
+    }
+    let mut eager_imports = eager_imports.into_iter().collect::<Vec<_>>();
+    eager_imports.sort_by(|(left, _), (right, _)| {
+        left.to_ascii_lowercase()
+            .cmp(&right.to_ascii_lowercase())
+            .then(left.cmp(right))
+    });
+    for (module, names) in eager_imports {
         out.push_str(&format!(
             "from {module} import {}\n",
             names.into_iter().collect::<Vec<_>>().join(", ")
         ));
     }
+    out.push_str("\n\n");
+    out.push_str(&T::decl());
+    out.push('\n');
+    for (module, names) in cyclic_imports {
+        out.push_str(&format!(
+            "from {module} import {}  # noqa: E402 - cyclic dependency\n",
+            names.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
     Ok(out)
+}
+
+fn reaches_type(dep: &Dependency, target: TypeId, seen: &mut HashSet<TypeId>) -> bool {
+    if dep.id == target {
+        return true;
+    }
+    seen.insert(dep.id)
+        && (dep.children)()
+            .iter()
+            .any(|child| reaches_type(child, target, seen))
 }
 
 macro_rules! primitive {

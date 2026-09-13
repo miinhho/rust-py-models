@@ -51,6 +51,21 @@ struct Right {
 }
 
 #[derive(PY)]
+struct CycleA {
+    b: Option<Box<CycleB>>,
+}
+
+#[derive(PY)]
+struct CycleB {
+    c: Option<Box<CycleC>>,
+}
+
+#[derive(PY)]
+struct CycleC {
+    a: Option<Box<CycleA>>,
+}
+
+#[derive(PY)]
 #[py(export)]
 struct ZeroArray {
     empty: [u8; 0],
@@ -119,6 +134,10 @@ fn generated_declarations_and_dependencies() {
     assert!(text.contains("display_name: str"));
     assert!(text.contains("address: Address | None"));
     assert!(text.contains("from .models.Address import Address"));
+    assert!(text.find("from .models.Address import Address") < text.find("@dataclass"));
+    let cyclic = Left::export_to_string().unwrap();
+    assert!(cyclic.contains("from .Right import Right  # noqa: E402 - cyclic dependency"));
+    assert!(cyclic.find("from .Right import Right") > cyclic.find("class Left:"));
     assert!(!text.contains("secret:"));
     assert_eq!(User::dependencies().len(), 3);
     assert!(Status::decl().contains("OnHold = \"on-hold\""));
@@ -151,4 +170,8 @@ fn invalid_paths_and_duplicate_python_names_are_rejected() {
 #[test]
 fn export_cyclic_dependencies() {
     Left::export_all().unwrap();
+    CycleA::export_all().unwrap();
+    assert!(CycleA::export_to_string()
+        .unwrap()
+        .contains("from .CycleB import CycleB  # noqa: E402 - cyclic dependency"));
 }

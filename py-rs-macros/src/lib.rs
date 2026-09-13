@@ -180,7 +180,7 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
     let output = attr.export_to.unwrap_or_else(|| format!("{name}.py"));
     let mut deps = Vec::new();
     let mut local_names = vec![name.clone()];
-    let declaration = match input.data {
+    let (prelude, declaration) = match input.data {
         Data::Struct(data) => {
             let (lines, field_deps, empty) = fields(&data.fields)?;
             deps.extend(field_deps);
@@ -189,12 +189,15 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
             } else {
                 quote! {}
             };
-            quote! {
-                let mut out = format!("from dataclasses import dataclass\n\n@dataclass\nclass {}:\n", #name);
-                #(#lines)*
-                #pass
-                out
-            }
+            (
+                quote! { String::from("from dataclasses import dataclass\n") },
+                quote! {
+                    let mut out = format!("@dataclass\nclass {}:\n", #name);
+                    #(#lines)*
+                    #pass
+                    out
+                },
+            )
         }
         Data::Enum(data) => {
             let mut variants = Vec::new();
@@ -266,12 +269,15 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
                 } else {
                     quote! {}
                 };
-                quote! {
-                    let mut out = format!("from enum import Enum\n\nclass {}(str, Enum):\n", #name);
-                    #(#variants)*
-                    #pass
-                    out
-                }
+                (
+                    quote! { String::from("from enum import Enum\n") },
+                    quote! {
+                        let mut out = format!("class {}(str, Enum):\n", #name);
+                        #(#variants)*
+                        #pass
+                        out
+                    },
+                )
             } else {
                 let names: Vec<String> = data
                     .variants
@@ -282,12 +288,15 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
                     })
                     .collect();
                 let alias = names.join(" | ");
-                quote! {
-                    let mut out = String::from("from dataclasses import dataclass, field\nfrom typing import Literal, TypeAlias\n\n");
-                    #(#variants)*
-                    out.push_str(&format!("{}: TypeAlias = {}\n", #name, #alias));
-                    out
-                }
+                (
+                    quote! { String::from("from dataclasses import dataclass, field\nfrom typing import Literal, TypeAlias\n") },
+                    quote! {
+                        let mut out = String::new();
+                        #(#variants)*
+                        out.push_str(&format!("{}: TypeAlias = {}\n", #name, #alias));
+                        out
+                    },
+                )
             }
         }
         Data::Union(data) => {
@@ -313,6 +322,7 @@ fn expand(input: DeriveInput) -> syn::Result<Tokens> {
         impl ::py_rs::PY for #ident {
             fn name() -> String { #name.into() }
             fn inline() -> String { #name.into() }
+            fn prelude() -> String { #prelude }
             fn decl() -> String { #declaration }
             fn dependencies() -> Vec<::py_rs::Dependency> {
                 let mut deps = Vec::new();
