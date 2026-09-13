@@ -50,10 +50,7 @@ jobs:
           name: python-bindings
           path: py-rs/bindings/
 
-      - name: Install Python linter
-        run: python -m pip install --disable-pip-version-check ruff==0.15.12
-      - name: Check generated Python
-        run: |
-          python -m compileall -q py-rs/bindings
-          ruff check --select E402,F401,F821,I py-rs/bindings py-rs/tests/test_generated_bindings.py
-          python -m unittest discover -s py-rs/tests -p 'test_*.py'
+      - name: Install Python test tools
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+      - name: Test generated Python
+        run: python scripts/test_python.py --bindings-dir py-rs/bindings

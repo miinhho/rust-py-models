@@ -1,3 +1,5 @@
 /target
+.venv/
+.mypy_cache/
 **/bindings/
 **/__pycache__/

@@ -6,12 +6,16 @@ import collections
 import dataclasses
 import decimal
 import ipaddress
+import os
 import pathlib
 import sys
 import typing
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+sys.path.insert(
+    0,
+    os.environ.get("PY_RS_BINDINGS_ROOT", str(pathlib.Path(__file__).resolve().parents[1])),
+)
 
 from bindings.AuditEvent import (  # noqa: E402
     AuditEvent,
