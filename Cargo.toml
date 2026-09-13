@@ -1,0 +1,3 @@
+[workspace]
+members = ["py-rs", "py-rs-macros"]
+resolver = "2"
