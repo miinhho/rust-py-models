@@ -144,6 +144,13 @@ struct Both {
     second: same_path::Second,
 }
 
+#[derive(PY)]
+#[py(rename = "decimal")]
+struct CollidingImport {
+    #[py(type = "decimal.Decimal", import = "decimal")]
+    amount: u64,
+}
+
 #[test]
 fn generated_declarations_and_dependencies() {
     let text = User::export_to_string().unwrap();
@@ -188,6 +195,9 @@ fn invalid_paths_and_duplicate_python_names_are_rejected() {
         Both::export_all(),
         Err(ExportError::ConflictingFile(_))
     ));
+    assert!(
+        matches!(CollidingImport::export_to_string(), Err(ExportError::NameCollision(name)) if name == "decimal")
+    );
 }
 
 #[test]
