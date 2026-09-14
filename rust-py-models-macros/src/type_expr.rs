@@ -63,7 +63,7 @@ pub(crate) fn result_args(ty: &Type) -> Option<(&Type, &Type)> {
     Some((ok, err))
 }
 
-fn is_param(ty: &Type, params: &HashSet<String>) -> Option<String> {
+pub(crate) fn is_param(ty: &Type, params: &HashSet<String>) -> Option<String> {
     if let Type::Path(path) = ty {
         if path.qself.is_none() && path.path.segments.len() == 1 {
             let segment = path.path.segments.first()?;
