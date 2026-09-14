@@ -34,7 +34,7 @@ Use this reference to determine the annotation emitted for a Rust field. Mapping
 Python annotations do not carry these Rust constraints:
 
 - `Option<T>` accepts `None` but does not make a dataclass argument optional.
-- `Result<T, E>` describes only the `Ok` value. The exporter does not handle `Err`; resolve errors before supplying values to Python.
+- `Result<T, E>` emits the annotation for `T`; the annotation does not represent `E` or a Python `Result` object.
 - integer mappings do not enforce Rust ranges or nonzero constraints;
 - `char` does not enforce a one-character string;
 - arrays longer than 12 elements do not retain their exact length;
