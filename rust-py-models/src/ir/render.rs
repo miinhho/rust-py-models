@@ -64,6 +64,8 @@ impl NameResolver {
         model_imports: &[ModelImport],
         declarations: &[Declaration],
     ) -> Self {
+        // Reserve names introduced anywhere in the module: deferred annotations
+        // are later resolved against the class and module namespaces.
         let declaration_names = declarations
             .iter()
             .map(Declaration::name)
@@ -180,6 +182,8 @@ pub(crate) fn render_module(
             typing.into_iter().collect::<Vec<_>>().join(", ")
         );
     }
+    // A cyclic dependency cannot be imported until this module's declarations
+    // exist, or Python observes a partially initialized module.
     let eager = model_imports
         .iter()
         .filter(|import| !import.cyclic)

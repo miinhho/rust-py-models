@@ -1,14 +1,57 @@
-# Generation and export
+# Generate Python models
 
-`#[derive(PY)]` analyzes a Rust struct or enum and implements the typed [`PY`](../rust-py-models/src/trait_py.rs) contract. The derive builds `TypeSpec` and `ModelSpec` IR; a single renderer turns that IR into Python source when an export method runs. Compilation does not write Python files. `#[py(export)]` also creates a Rust test that calls `export_all()`; running `cargo test export_bindings` executes that test and writes the files.
+## Export a model graph
 
-`export_all()` checks the root and its transitive dependencies before writing generated modules. Declarations with the same `#[py(export_to)]` path are combined into one module with deduplicated imports and definitions. `export_all_to(path)` performs the same operation in an explicit base directory and ignores `RUST_PY_MODELS_EXPORT_DIR`. `export()` writes only the selected declaration, while `export_to_string()` renders its module without writing it. The default output directory is `bindings/`, relative to the Rust package running the test. Set `RUST_PY_MODELS_EXPORT_DIR`, for example `RUST_PY_MODELS_EXPORT_DIR=python/bindings cargo test export_bindings`, to change it. `#[py(export_to = "models/User.py")]` sets a path within that directory. Nested output directories receive `__init__.py` package markers. A locked owner manifest records each export root's generated files, removes obsolete files only when no other root owns them, and refuses to replace or delete generated files modified since the previous export. Output paths that differ only by ASCII case are rejected for portability.
+Derive `PY` for every Rust struct or enum that should appear in Python. Mark an export root with `#[py(export)]`:
 
-Generated modules begin with a provenance header, `# fmt: off`, and `from __future__ import annotations`. Their standard-library imports and non-cyclic model imports precede the declarations. Imports are aliased when a Python field would shadow a module or imported model name. Imports that would form a dependency cycle follow the declarations with `# noqa: E402 - cyclic dependency`. This allows the modules to import each other after their classes have been defined; `typing.get_type_hints()` can then resolve the annotations.
+```rust
+use rust_py_models::PY;
 
-## Python class shapes
+#[derive(PY)]
+struct Address {
+    city: String,
+}
 
-Named structs become dataclasses with named fields. Tuple structs become dataclasses with `_0`, `_1`, and so on; unit structs become empty dataclasses. A unit-only enum becomes a `str, Enum` class. An enum containing payload variants generates one dataclass per variant, including empty dataclasses for its unit variants, and a `TypeAlias` union for the enum name:
+#[derive(PY)]
+#[py(export, export_to = "models/User.py")]
+struct User {
+    id: u64,
+    address: Address,
+}
+```
+
+Run `cargo test export_bindings` to write `models/User.py`, `Address.py`, and package `__init__.py` files below the export directory. Each referenced model keeps its own `export_to` path; without one, `Address` uses `Address.py`. The default export directory is `bindings/`. Set `RUST_PY_MODELS_EXPORT_DIR` to choose another location.
+
+Choose the API according to who owns generation:
+
+| API | Use when |
+| --- | --- |
+| `#[py(export)]` | A Rust test should regenerate the model and all dependencies. |
+| `PY::export_all()` | Rust code should export a model graph to the configured directory. |
+| `PY::export_all_to(path)` | Rust code should choose the base output directory explicitly. |
+| `PY::export()` | Only the selected declaration should be written. |
+| `PY::export_to_string()` | The caller needs rendered Python without file output. |
+
+`export_all_to(path)` ignores `RUST_PY_MODELS_EXPORT_DIR`. Paths from `#[py(export_to = "...")]` remain relative to the supplied directory.
+
+## Generated file ownership
+
+Generated modules contain a provenance header. The exporter uses that ownership information to avoid destroying handwritten code:
+
+- a generated file may be replaced by the Rust type that owns it;
+- a modified generated file is rejected instead of overwritten;
+- an obsolete generated file is removed only after no export root owns it;
+- output paths that differ only by ASCII case are rejected for portability.
+
+Do not hand-edit generated modules. Change the Rust model or generator configuration and regenerate them.
+
+Declarations that share an `export_to` path are emitted in one module. Imports and shared definitions are deduplicated. A field or declaration that shadows an imported name causes the import to receive a deterministic alias.
+
+## Generated class shapes
+
+Named structs become dataclasses with named fields. Tuple structs use `_0`, `_1`, and subsequent positional field names. Unit structs become empty dataclasses.
+
+A unit-only enum becomes a `str, Enum` class. An enum with payload variants becomes one dataclass per variant and a union alias:
 
 ```rust
 #[derive(PY)]
@@ -30,33 +73,51 @@ class EventLogout:
 Event: TypeAlias = EventLogin | EventLogout
 ```
 
-`EventLogin(user_id=1)` and `EventLogout(user_id=1)` are distinct runtime objects even though their fields match. `Event` is a type alias, not a base class or an object to construct. Without Serde tagging, no synthetic tag field is added. Unit-only enum values default to their Rust variant names as strings; Rust discriminant values do not set the Python values.
+Construct `EventLogin` or `EventLogout`; `Event` is an annotation, not a base class. Unit-only enum values use the Rust variant name unless renamed. Rust discriminants do not become Python values.
 
-## Attributes
+## Configure generated declarations
 
-| Attribute | Applies to | Result |
+| Attribute | Applies to | Effect |
 | --- | --- | --- |
-| `#[py(export)]` | Struct or enum | Adds an export test that includes transitive dependencies. |
-| `#[py(export_to = "models/User.py")]` | Struct or enum | Sets the path below the export directory. |
-| `#[py(rename = "...")]` | Struct, enum, field, or variant | Renames the Python class or field. On a unit-only enum variant, changes its string value; on a payload variant, changes the suffix of its generated class name. |
-| `#[py(skip)]` | Field or variant | Omits it from the Python declaration. |
-| `#[py(unsafe_type = "decimal.Decimal", import = "decimal")]` | Field | Injects an unchecked annotation and optionally adds a module import. The name is deliberately unsafe: the generator does not parse the annotation, rewrite names inside it, generate conversions, or verify that it matches the Rust type. |
-| `#[py(as = "RustType")]` | Struct, enum, or field | Uses another Rust type's Python mapping. On a struct or enum this creates no Python declaration or output file; on a field it replaces that field's inferred mapping. |
-| `#[py(newtype)]` | One-field non-generic tuple struct | Emits a `typing.NewType` declaration that preserves static type identity without wrapping the runtime Python value. |
-| `#[py(concrete(T = RustType))]` | Generic struct or enum | Substitutes a Rust type for a generic parameter in the generated declaration and removes that parameter from Python `Generic[...]`. |
-| `#[py(bound = "T: rust_py_models::PY")]` | Generic struct or enum | Supplies explicit Rust where-predicates instead of inferred `PY` bounds. |
-| `#[py(frozen)]` | Struct, payload enum, or payload variant | Uses `@dataclass(frozen=True)`. |
-| `#[py(slots)]` | Struct, payload enum, or payload variant | Uses `@dataclass(slots=True)`. |
-| `#[py(kw_only)]` | Struct, payload enum, or payload variant | Uses `@dataclass(kw_only=True)`. |
+| `#[py(export)]` | Struct or enum | Adds an export test for the model graph. |
+| `#[py(export_to = "models/User.py")]` | Struct or enum | Sets the module path below the export directory. |
+| `#[py(rename = "...")]` | Struct, enum, field, or variant | Changes the Python name. For unit enum variants it changes the string value; for payload variants it changes the generated class suffix. |
+| `#[py(skip)]` | Field or variant | Omits the item from Python. |
+| `#[py(as = "RustType")]` | Struct, enum, or field | Reuses another Rust type's Python mapping. |
+| `#[py(unsafe_type = "decimal.Decimal", import = "decimal")]` | Field | Emits an unchecked annotation and optional module import. |
+| `#[py(newtype)]` | One-field, non-generic tuple struct | Emits a `typing.NewType` declaration for static type identity. |
+| `#[py(concrete(T = RustType))]` | Generic struct or enum | Replaces a type parameter with a concrete Rust mapping. |
+| `#[py(bound = "T: rust_py_models::PY")]` | Generic struct or enum | Replaces inferred `PY` bounds with the supplied predicates. |
+| `#[py(frozen)]` | Struct or payload variant | Sets `frozen=True` on the dataclass. |
+| `#[py(slots)]` | Struct or payload variant | Sets `slots=True` on the dataclass. |
+| `#[py(kw_only)]` | Struct or payload variant | Sets `kw_only=True` on the dataclass. |
 
-With the optional `serde-compat` Cargo feature, the derive recognizes Serde `rename`, `rename_all`, `rename_all_fields`, `tag`, `content`, `untagged`, `skip`, `flatten`, and `default` attributes. The supported rename rules are Serde's `lowercase`, `UPPERCASE`, `PascalCase`, `camelCase`, `snake_case`, `SCREAMING_SNAKE_CASE`, `kebab-case`, and `SCREAMING-KEBAB-CASE`. `#[py(rename = "...")]` takes precedence over Serde rename on the same item.
+`unsafe_type` is an escape hatch. The exporter does not parse the expression, rewrite names inside it, export referenced models, or verify that it represents the Rust type. Prefer `as` when an existing Rust type already has the required mapping.
 
-`tag` adds an `init=False` `Literal[...]` discriminator to structs and to unit or named enum variants. `tag` plus `content` uses an adjacent discriminator and payload field; named payloads receive a generated `...Content` dataclass. `untagged` payload enums retain their variant dataclasses without a discriminator. `rename_all_fields` applies to named payload fields. `flatten` expands fields from another derived struct and validates duplicate Python names. `skip` omits a field or variant. `default` is accepted for source compatibility but does not add a Python default because the Rust default value is not available to the derive; generated constructor arguments remain required.
+Dataclass options default to `False`; explicit `false` values are accepted. Options on a payload enum apply to every generated variant unless a variant overrides them. Unit-only enums reject dataclass options.
 
-Dataclass flags default to Python's `False`. Explicit values such as `#[py(slots = false)]` are accepted. Flags on a payload enum apply to all generated variant classes, and each variant can override them. Unit-only enums reject dataclass flags. Python names and output paths are checked for invalid ASCII identifiers and collisions; invalid Serde renames are rejected rather than rewritten.
+## Use Serde names and shapes
 
-Rust doc comments become Python class or attribute docstrings. `#[deprecated(note = "...", since = "...")]` is appended to the generated documentation. Rust examples are preserved only as ordinary documentation text; the generator does not translate Rust examples into Python.
+Enable the `serde-compat` feature to read these Serde attributes:
 
-Type parameters become Python `TypeVar` and `Generic` declarations. Rust lifetimes disappear from Python annotations. `PhantomData<T>` fields are omitted. `#[py(concrete(...))]` specializes selected parameters, while `#[py(bound = "...")]` replaces inferred `PY` bounds. Const generics and generic `#[py(newtype)]` declarations are unsupported. Because `#[py(export)]` cannot choose concrete Rust type arguments for a generic declaration, export a concrete instantiation from a handwritten Rust test, for example `Page::<User>::export_all()`.
+- `rename`, `rename_all`, and `rename_all_fields`;
+- `tag`, `content`, and `untagged`;
+- `skip`, `flatten`, and `default`.
 
-See [type mapping](type-mapping.md) for the annotations used inside these classes and [compatibility](compatibility.md) for runtime checks.
+`#[py(rename = "...")]` takes precedence over a Serde rename on the same item. Invalid Python identifiers and duplicate Python names are errors rather than silently rewritten.
+
+Serde `tag` adds an `init=False` `Literal[...]` discriminator. `tag` with `content` emits an adjacent payload field and, for named payloads, a content dataclass. `flatten` copies fields from another derived dataclass and rejects duplicate names. Serde `default` does not make a Python argument optional because the derive cannot obtain the Rust default value.
+
+## Generics and documentation
+
+Rust type parameters become Python `TypeVar` and `Generic` declarations. Lifetimes are omitted, and `PhantomData<T>` fields are not generated. Const generics and generic `#[py(newtype)]` declarations are unsupported.
+
+An export test cannot infer concrete arguments for a generic root. Export a concrete instantiation from a handwritten Rust test:
+
+```rust
+Page::<User>::export_all()?;
+```
+
+Rust doc comments become Python class or attribute documentation. A `#[deprecated(note = "...", since = "...")]` annotation is included in that documentation.
+
+See [type mapping](type-mapping.md) for field annotations and [compatibility](compatibility.md) for supported Python versions.

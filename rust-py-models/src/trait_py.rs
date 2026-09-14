@@ -3,42 +3,48 @@ use crate::export;
 use crate::{ModelSpec, TypeSpec};
 use std::path::Path;
 
-/// Describes the typed Python representation of a Rust type.
+/// Describes the Python annotation and optional declaration for a Rust type.
+///
+/// Deriving `PY` is the normal implementation path for structs and enums.
+/// Manual implementations should build annotations with [`TypeSpec`] so imports
+/// and model dependencies remain available to the exporter.
 pub trait PY {
-    /// Python annotation and all requirements carried by that annotation.
+    /// Returns this Rust type's Python annotation and its requirements.
     fn type_spec() -> TypeSpec;
 
-    /// Build this type constructor with symbolic generic arguments.
+    /// Applies symbolic arguments when this Rust type is used as a generic constructor.
     fn type_spec_with(_args: &[TypeSpec]) -> TypeSpec {
         Self::type_spec()
     }
 
-    /// Complete declaration emitted when this Rust type is exported.
+    /// Returns the declaration exported for this Rust type.
+    ///
+    /// Scalar and transparent mappings return `Ok(None)`.
     ///
     /// # Errors
     ///
-    /// Returns an [`ExportError`] when declaration construction fails.
+    /// Returns an error if the declaration cannot be constructed.
     fn model_spec() -> Result<Option<ModelSpec>, ExportError> {
         Ok(None)
     }
 
-    /// Render only this type's Python annotation.
+    /// Renders this type's annotation without a declaration or imports.
     #[must_use]
     fn inline() -> String {
         Self::type_spec().annotation()
     }
 
-    /// Whether this type's Python representation can be hashed.
+    /// Returns whether the Python representation may be a set item or dict key.
     #[must_use]
     fn is_hashable() -> bool {
         Self::type_spec().is_hashable()
     }
 
-    /// Render one Python module, including its imports.
+    /// Renders the module for this type without writing it.
     ///
     /// # Errors
     ///
-    /// Returns an [`ExportError`] when the declaration or its dependencies are invalid.
+    /// Returns an error if this type or a referenced declaration is invalid.
     fn export_to_string() -> Result<String, ExportError>
     where
         Self: Sized,
@@ -46,11 +52,11 @@ pub trait PY {
         export::render::<Self>()
     }
 
-    /// Write this declaration to `bindings/<name>.py` (or `#[py(export_to)]`).
+    /// Writes only this type's declaration to the configured export directory.
     ///
     /// # Errors
     ///
-    /// Returns an [`ExportError`] when rendering fails or the destination cannot be written.
+    /// Returns an error if rendering or writing fails.
     fn export() -> Result<(), ExportError>
     where
         Self: Sized,
@@ -58,11 +64,11 @@ pub trait PY {
         export::export_one::<Self>(&export::export_dir())
     }
 
-    /// Export this type and all transitive dependencies to the configured directory.
+    /// Writes this type and all transitive model dependencies.
     ///
     /// # Errors
     ///
-    /// Returns an [`ExportError`] when any declaration is invalid or cannot be written.
+    /// Returns an error if any declaration is invalid or any file cannot be written.
     fn export_all() -> Result<(), ExportError>
     where
         Self: Sized,
@@ -70,14 +76,14 @@ pub trait PY {
         export::export_all::<Self>()
     }
 
-    /// Export this type and all transitive dependencies to an explicit directory.
+    /// Writes this type and all transitive dependencies below `dir`.
     ///
-    /// This ignores `RUST_PY_MODELS_EXPORT_DIR`; `#[py(export_to = "...")]`
-    /// paths remain relative to `dir`.
+    /// `dir` replaces the configured export directory. Paths set by
+    /// `#[py(export_to = "...")]` remain relative to it.
     ///
     /// # Errors
     ///
-    /// Returns an [`ExportError`] when any declaration is invalid or cannot be written.
+    /// Returns an error if any declaration is invalid or any file cannot be written.
     fn export_all_to(dir: impl AsRef<Path>) -> Result<(), ExportError>
     where
         Self: Sized,

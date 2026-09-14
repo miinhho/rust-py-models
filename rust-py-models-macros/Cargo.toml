@@ -2,6 +2,7 @@
 name = "rust-py-models-macros"
 version = "0.1.0"
 edition = "2021"
+rust-version.workspace = true
 license = "MIT"
 description = "Derive macro for rust-py-models"
 homepage = "https://github.com/miinhho/rust-py-models"

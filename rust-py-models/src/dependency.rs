@@ -24,6 +24,10 @@ impl PartialEq for Dependency {
 impl Eq for Dependency {}
 
 impl Dependency {
+    /// Creates a dependency on the Python declaration provided by `T`.
+    ///
+    /// `id` identifies the declaration, while `name` and `path` describe the
+    /// import visible to the generated module.
     #[must_use]
     pub fn of<T: PY + ?Sized>(
         id: &'static str,

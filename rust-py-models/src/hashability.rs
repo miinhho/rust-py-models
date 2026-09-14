@@ -15,7 +15,11 @@ impl Drop for Guard {
     }
 }
 
-/// Stops recursive model graphs from recursing forever during hash checks.
+/// Evaluates hashability once for `T`, returning `false` on a recursive edge.
+///
+/// A recursive edge cannot prove that every reachable field is hashable, so the
+/// conservative result prevents recursive model graphs from being accepted as
+/// Python set elements or dictionary keys.
 pub fn check<T: ?Sized>(evaluate: impl FnOnce() -> bool) -> bool {
     let id = std::any::type_name::<T>();
     if !CHECKING.with(|checking| checking.borrow_mut().insert(id)) {

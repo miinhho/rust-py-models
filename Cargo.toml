@@ -1,3 +1,6 @@
 [workspace]
 members = ["rust-py-models", "rust-py-models-macros"]
 resolver = "2"
+
+[workspace.package]
+rust-version = "1.98"

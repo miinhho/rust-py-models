@@ -49,6 +49,8 @@ fn modules_locked(
         .iter()
         .map(|(path, content)| (path.clone(), content_hash(content.as_bytes())))
         .collect::<BTreeMap<_, _>>();
+    // Dependencies may be shared by several export roots. A file becomes
+    // obsolete only after every owner has released it.
     for (relative, expected_hash) in previous {
         if current.contains_key(&relative)
             || manifest.values().any(|owned| owned.contains_key(&relative))
@@ -86,6 +88,8 @@ fn protect_modified_files(
         if existing == replacement.as_bytes() {
             continue;
         }
+        // The header identifies generated files; the recorded hash distinguishes
+        // untouched generated content from a user's edits.
         let expected = manifest
             .values()
             .filter_map(|owned| owned.get(relative))
@@ -97,6 +101,8 @@ fn protect_modified_files(
     Ok(())
 }
 
+// Reject collisions before writing because a tree created on Linux may later be
+// consumed on a case-insensitive filesystem.
 fn validate_portable_paths(dir: &Path, outputs: &[(PathBuf, String)]) -> Result<(), ExportError> {
     let mut paths = BTreeMap::<String, PathBuf>::new();
     for existing in python_files(dir)? {
@@ -281,12 +287,13 @@ fn decode_hex(value: &str) -> Option<String> {
     if value.len() & 1 == 1 {
         return None;
     }
-    let bytes = value
-        .as_bytes()
-        .chunks_exact(2)
-        .map(|digits| {
-            let high = char::from(digits[0]).to_digit(16)?;
-            let low = char::from(digits[1]).to_digit(16)?;
+    let (pairs, remainder) = value.as_bytes().as_chunks::<2>();
+    debug_assert!(remainder.is_empty());
+    let bytes = pairs
+        .iter()
+        .map(|[high, low]| {
+            let high = char::from(*high).to_digit(16)?;
+            let low = char::from(*low).to_digit(16)?;
             u8::try_from((high << 4) | low).ok()
         })
         .collect::<Option<Vec<_>>>()?;

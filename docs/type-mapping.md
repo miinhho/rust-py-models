@@ -1,14 +1,13 @@
 # Rust to Python type mapping
 
-These mappings select field annotations and referenced Python objects inside generated dataclasses. They do not convert Rust values to Python values or validate constructor arguments at runtime.
+Use this reference to determine the annotation emitted for a Rust field. Mappings describe Python objects; they do not convert Rust values or validate Python constructor arguments.
 
-## Built-in mappings
+## Standard-library mappings
 
 | Rust type | Python annotation |
 | --- | --- |
 | `bool` | `bool` |
-| Signed and unsigned integers, including `isize` and `usize` | `int` |
-| `NonZero*` integers | `int` |
+| Signed and unsigned integers, including `isize`, `usize`, and `NonZero*` | `int` |
 | `f32`, `f64` | `float` |
 | `String`, `str`, `&str`, `char` | `str` |
 | `()` | `None` |
@@ -24,18 +23,26 @@ These mappings select field annotations and referenced Python objects inside gen
 | `HashSet<T, S>`, `BTreeSet<T>` | `set[T]` |
 | `HashMap<K, V, S>`, `BTreeMap<K, V>` | `dict[K, V]` |
 | `[T; 0]` | `tuple[()]` |
-| `[T; N]` for `1 <= N <= 12` | Fixed-length tuple with `T` repeated `N` times |
-| `[T; N]` for `N > 12` | `tuple[T, ...]`; the exact length is not represented |
-| Tuples with 1–10 elements | Fixed-length tuple with each element type shown |
+| `[T; N]`, where `1 <= N <= 12` | Fixed-length tuple containing `N` instances of `T` |
+| `[T; N]`, where `N > 12` | `tuple[T, ...]` |
+| Tuples with 1–10 elements | Fixed-length tuple preserving each element type |
 | `Box<T>`, `Rc<T>`, `Arc<T>`, `Cell<T>`, `RefCell<T>`, `Mutex<T>`, `RwLock<T>`, `&T` | `T` |
 | `Rc::Weak<T>`, `Arc::Weak<T>` | `T | None` |
-| `Cow<'a, T>` | The mapping of borrowed `T`; ownership is not represented |
+| `Cow<'a, T>` | The mapping for borrowed `T` |
 
-For example, `Cow<'a, str>` maps to `str`, and `Cow<'a, [u8]>` maps to `list[int]`. `Option<T>` permits `None` but does **not** make a dataclass constructor argument optional. A Rust `u8` or `NonZeroU8` maps to `int` without range or nonzero enforcement; `char` maps to `str` without a one-character check.
+Important differences from Rust remain visible only in prose, not in the annotation:
 
-Python sets require hashable elements and dictionaries require hashable keys. The exporter checks the mapped type's hashability, including frozen dataclasses and their fields, before writing these declarations.
+- `Option<T>` accepts `None` but does not make a dataclass argument optional.
+- integer mappings do not enforce Rust ranges or nonzero constraints;
+- `char` does not enforce a one-character string;
+- arrays longer than 12 elements do not retain their exact length;
+- ownership, borrowing, locking, and `Cow` ownership state are not represented.
 
-## Cargo feature mappings
+The exporter rejects a set element or dictionary key when its generated Python type is known to be unhashable. A derived dataclass is hashable only when its dataclass options and fields make it hashable.
+
+## Optional crate mappings
+
+Enable the corresponding Cargo feature on `rust-py-models`:
 
 | Feature | Rust type | Python annotation |
 | --- | --- | --- |
@@ -48,19 +55,24 @@ Python sets require hashable elements and dictionaries require hashable keys. Th
 | `indexmap-impl` | `indexmap::IndexMap<K, V>`, `IndexSet<T>` | `dict[K, V]`, `list[T]` |
 | `ordered-float-impl` | `ordered_float::OrderedFloat<T>`, `NotNan<T>` | `T` |
 | `semver-impl` | `semver::Version`, `VersionReq` | `str` |
+| `serde-json-impl` | `serde_json::Value` | Recursive union of JSON-compatible Python values |
+| `serde-json-impl` | `serde_json::Number`, `Map<String, Value>` | `int | float`, `dict[str, JSON value]` |
 | `smol-str-impl` | `smol_str::SmolStr` | `str` |
 | `tokio-impl` | `tokio::sync::Mutex<T>`, `RwLock<T>`, `OnceCell<T>` | `T`, `T`, `T | None` |
-| `serde-json-impl` | `serde_json::Value` | Recursive `_PyRsJsonValue` type alias covering null, booleans, numbers, strings, arrays, and string-keyed objects |
-| `serde-json-impl` | `serde_json::Number`, `Map<String, Value>` | `int | float`, `dict[str, _PyRsJsonValue]` |
 | `url-impl` | `url::Url` | `str` |
 | `uuid-impl` | `uuid::Uuid` | `uuid.UUID` |
 
-Enable a feature in `Cargo.toml`, for example `rust-py-models = { path = "path/to/rust-py-models/rust-py-models", features = ["chrono-impl"] }`. `url::Url` is represented as a Python string because the standard library has no equivalent URL value class; the annotation does not parse URLs.
+For example:
 
-Temporal types map directly to the closest Python standard-library type. Python's `datetime.datetime` does not encode the Rust timezone parameter in its annotation, and the generated model does not validate `tzinfo`, offsets, sign, or precision.
+```toml
+[dependencies]
+rust-py-models = { version = "0.1", features = ["chrono-impl", "uuid-impl"] }
+```
 
-## Unmapped Rust types
+`DateTime<Tz>` maps to `datetime.datetime`; the annotation does not retain the Rust timezone parameter or validate `tzinfo`. `url::Url` maps to `str` and does not parse URLs.
 
-`Result<T, E>` and range types have no automatic Python mapping because they need an application-specific object representation. A field can use `#[py(unsafe_type = "...")]` as an explicit unchecked annotation override, but doing so does not generate Python behavior for that Rust type, rewrite imported names inside the raw annotation, or export a referenced model automatically. Use `#[py(as = "RustType")]` when another Rust type already has the desired mapping and dependency behavior.
+## Types without a default mapping
 
-The generator produces concrete Python classes for derived structs and enums, but its field annotations remain descriptive. JSON serialization, Rust FFI, and automatic value conversion are outside the current implementation.
+`Result<T, E>` and range types require an application-specific representation and therefore have no automatic mapping.
+
+Use `#[py(as = "RustType")]` to reuse an existing safe mapping. Use `#[py(unsafe_type = "...")]` only when the application owns the unchecked Python annotation and any required runtime behavior.

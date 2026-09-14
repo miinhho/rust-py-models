@@ -68,7 +68,6 @@ fn valid_module_name(name: &str) -> bool {
         )
 }
 
-/// Relative Python import path from one generated module to another.
 pub(super) fn relative_module(from: &Path, to: &Path) -> String {
     let from_dir = from.parent().unwrap_or(Path::new(""));
     let to_dir = to.parent().unwrap_or(Path::new(""));

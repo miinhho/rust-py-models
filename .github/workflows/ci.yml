@@ -14,7 +14,7 @@ jobs:
       RUST_PY_MODELS_EXPORT_DIR: python-tests/binding
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: rustfmt, clippy
 

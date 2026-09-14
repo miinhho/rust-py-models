@@ -22,7 +22,6 @@ impl IntoIterator for ExportPlan {
     }
 }
 
-/// Validate each concrete instantiation and group declarations by Python module.
 pub(super) fn collect<T: PY + ?Sized>() -> Result<ExportPlan, ExportError> {
     let root = T::model_spec()?.ok_or(ExportError::NotExportable(std::any::type_name::<T>()))?;
     let mut seen_concrete = HashSet::<&'static str>::new();
