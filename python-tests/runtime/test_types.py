@@ -89,6 +89,9 @@ class TypeMappingContracts(unittest.TestCase):
         list_alias, dict_alias = variants[5:]
         self.assertIs(typing.get_origin(list_alias), list)
         self.assertIs(typing.get_origin(dict_alias), dict)
-        recursive = typing.ForwardRef("_PyRsJsonValue")
-        self.assertEqual(typing.get_args(list_alias), (recursive,))
+        recursive = typing.get_args(list_alias)[0]
+        # Python 3.10 retains a string here; newer versions wrap it in ForwardRef.
+        self.assertIn(
+            recursive, ("_PyRsJsonValue", typing.ForwardRef("_PyRsJsonValue"))
+        )
         self.assertEqual(typing.get_args(dict_alias), (str, recursive))
