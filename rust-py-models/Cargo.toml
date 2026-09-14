@@ -1,0 +1,48 @@
+[package]
+name = "rust-py-models"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Generate importable Python dataclass and Enum models from Rust types"
+homepage = "https://github.com/miinhho/rust-py-models"
+repository = "https://github.com/miinhho/rust-py-models"
+readme = "../README.md"
+
+[dependencies]
+rust-py-models-macros = { path = "../rust-py-models-macros", version = "0.1.0" }
+bytes = { version = "1", optional = true }
+chrono = { version = "0.4", default-features = false, optional = true }
+bigdecimal = { version = "0.4", optional = true }
+bson = { version = "2", default-features = false, features = ["uuid-1"], optional = true }
+heapless = { version = "0.8", optional = true }
+indexmap = { version = "2", optional = true }
+ordered-float = { version = "4", optional = true }
+semver = { version = "1", optional = true }
+smol_str = { version = "0.3", optional = true }
+tokio = { version = "1", features = ["sync"], optional = true }
+serde_json = { version = "1", optional = true }
+url = { version = "2", default-features = false, optional = true }
+uuid = { version = "1", optional = true }
+fs2 = "0.4"
+thiserror = "2"
+
+[features]
+default = []
+serde-compat = ["rust-py-models-macros/serde-compat"]
+bytes-impl = ["dep:bytes"]
+chrono-impl = ["dep:chrono"]
+serde-json-impl = ["dep:serde_json"]
+url-impl = ["dep:url"]
+uuid-impl = ["dep:uuid"]
+bigdecimal-impl = ["dep:bigdecimal"]
+bson-impl = ["dep:bson"]
+heapless-impl = ["dep:heapless"]
+indexmap-impl = ["dep:indexmap"]
+ordered-float-impl = ["dep:ordered-float"]
+semver-impl = ["dep:semver"]
+smol-str-impl = ["dep:smol_str"]
+tokio-impl = ["dep:tokio"]
+
+[dev-dependencies]
+chrono-tz = "0.10"
+

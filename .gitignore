@@ -1,5 +1,23 @@
+# Rust
 /target
+
+# Python
 .venv/
+.pytest_cache/
 .mypy_cache/
-**/bindings/
 **/__pycache__/
+*.egg
+.ruff_cache/
+
+# Package test
+**/bindings/
+/python-tests/binding/
+
+.env
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store

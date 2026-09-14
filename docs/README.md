@@ -1,6 +1,6 @@
-# py-rs documentation
+# rust-py-models documentation
 
-`py-rs` generates concrete Python model classes from Rust definitions. Start with the [quick start](../README.md), then use these guides for the details:
+`rust-py-models` generates concrete Python model classes from Rust definitions. Start with the [quick start](../README.md), then use these guides for the details:
 
 - [Generation and export](generation.md): derive, Python class shapes, attributes, dependencies, and output files.
 - [Type mapping](type-mapping.md): built-in and feature-gated Rust types, plus semantic limits.

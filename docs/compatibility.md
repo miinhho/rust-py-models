@@ -1,15 +1,28 @@
 # Python compatibility and checks
 
-Generated modules are intended for CPython 3.10 through 3.14. The [CI workflow](../.github/workflows/ci.yml) is configured to run Rust formatting, Clippy, and tests once, upload the generated `py-rs/bindings` package, then check that same package independently under each of Python 3.10, 3.11, 3.12, 3.13, and 3.14.
+Generated modules are intended for CPython 3.10 through 3.14. The [CI workflow](../.github/workflows/ci.yml) is configured to run Rust formatting, Clippy, and tests once, upload the generated `python-tests/binding` package, then check that same package independently under each of Python 3.10, 3.11, 3.12, 3.13, and 3.14.
 
-Each Python job runs the same Python test command used locally. It compiles generated modules, runs Ruff, checks generated modules and consumer examples with mypy, and executes runtime tests. The consumer examples include valid calls and invalid calls marked with specific `type: ignore[...]` codes; mypy's unused-ignore check fails if an invalid call is no longer detected. Runtime tests construct real classes and resolve cyclic and generic annotations with `typing.get_type_hints()`.
+Rust fixtures whose generated bindings are consumed by Python live under
+`rust-py-models/tests/python/`. The independent Python consumer runner lives at
+`python-tests/`; its runtime and static contracts are split by behavior under
+`runtime/` and `typecheck/`. Generated files shared between the Rust producer
+and Python consumer are written to `python-tests/binding/`. Each Python job
+compiles every generated module, runs Ruff formatting checks (generated files opt out with `# fmt: off`) and lint rules, checks generated modules and consumer examples with mypy, imports every generated module in a fresh interpreter, and executes runtime tests. Runtime coverage includes dataclass constructor semantics, documentation, enum representations, nested cyclic imports, recursive generics, temporal type identity, standard mappings, and optional Cargo feature mappings.
 
-Create a Python test environment and run the complete generation-to-consumer pipeline locally:
+The Python test project owns its `python-tests/pyproject.toml`,
+`python-tests/uv.lock`, `python-tests/.python-version`, and local `.venv`.
+Run the complete Rust-generation-to-Python-consumer pipeline locally:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-test.txt
-.venv/bin/python scripts/test_python.py
+uv sync --project python-tests --locked
+uv run --project python-tests --locked python python-tests
 ```
 
-The command exports bindings into a fresh temporary directory before checking them, so ignored files from an earlier run cannot mask a missing export. To check bindings generated elsewhere, run `.venv/bin/python scripts/test_python.py --bindings-dir path/to/bindings`. The CI Rust job still runs formatting, Clippy, and Rust tests, then passes its generated package to each Python matrix job. A local pass on one version does not establish compatibility with the other versions; the CI matrix reports those results separately.
+The runner removes and regenerates `python-tests/binding/` before checking it,
+so files from an earlier run cannot mask a missing export. To check bindings
+already generated in that directory, run
+`uv run --project python-tests --locked python python-tests --check-only`.
+The CI matrix overrides the local default interpreter with each supported
+Python version while installing the exact dependency graph recorded in
+`python-tests/uv.lock`. A local pass on one version does not establish compatibility with
+the other versions; the CI matrix reports those results separately.

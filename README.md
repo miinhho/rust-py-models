@@ -1,20 +1,20 @@
-# py-rs
+# rust-py-models
 
 Generate importable Python classes from Rust structs and enums. Rust is the source of truth: Python users construct generated dataclasses and enums instead of maintaining a second set of model definitions. The output is Python `.py` code, not a `.pyi` stub or a Rust FFI layer.
 
-Like [ts-rs](https://github.com/Aleph-Alpha/ts-rs), `py-rs` uses a derive macro at compile time and exports bindings when a Rust test runs.
+`rust-py-models` uses a derive macro at compile time and exports bindings when a Rust test runs.
 
 ## Quick start
 
-Add `py-rs` to a Rust project:
+Add `rust-py-models` to a Rust project:
 
 ```toml
 [dependencies]
-py-rs = { path = "path/to/py-rs/py-rs" }
+rust-py-models = { path = "path/to/rust-py-models/rust-py-models" }
 ```
 
 ```rust
-use py_rs::PY;
+use rust_py_models::PY;
 
 #[derive(PY)]
 struct Address {
