@@ -42,7 +42,7 @@ Python annotations do not carry these Rust constraints:
 
 The exporter rejects a set element or dictionary key when its generated Python type is known to be unhashable. A derived dataclass is hashable only when its dataclass options and fields make it hashable.
 
-When a generic parameter appears only as the `E` of `Result<T, E>`, the generated Python model omits that parameter. Other uses of the parameter retain it.
+Generic parameters unused by the generated Python shape are omitted. This includes `E` used only as the error argument of `Result<T, E>` and `S` used only as the hasher argument of `HashMap<K, V, S>` or `HashSet<T, S>`. For a parameter hidden through another derived model, group the connected definitions with [`#[py_models]`](generation.md#generics-and-documentation). A parameter used by another Python field remains exposed.
 
 ## Optional crate mappings
 

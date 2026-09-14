@@ -122,6 +122,27 @@ Serde `tag` adds an `init=False` `Literal[...]` discriminator. `tag` with `conte
 
 Rust type parameters become Python `TypeVar` and `Generic` declarations. Lifetimes are omitted, and `PhantomData<T>` fields are not generated. Const generics and generic `#[py(newtype)]` declarations are unsupported.
 
+When one model's Python type parameters depend on another derived model, put the related definitions in one inline module marked `#[py_models]`. The macro resolves their parameter usage together before generating `PY` implementations. This also handles mutually recursive models. Every model in the group still uses `#[derive(PY)]`:
+
+```rust
+#[rust_py_models::py_models]
+mod models {
+    use rust_py_models::PY;
+
+    #[derive(PY)]
+    pub struct Inner<T, E> {
+        value: Result<T, E>,
+    }
+
+    #[derive(PY)]
+    pub struct Outer<T, E> {
+        inner: Inner<T, E>,
+    }
+}
+```
+
+Both classes expose only `T`, so `Outer<MyType, MyError>` needs `MyType: PY` but not `MyError: PY`. A parameter used by any Python field in the group remains exposed. Group analysis applies to derived models directly inside that module; a model outside it is treated as an opaque type when its parameters are inspected. Use an inline module containing the connected models when transitive parameter removal matters.
+
 `#[py(export)]` cannot be placed on a generic root. Export a concrete instantiation from your Rust entry point:
 
 ```rust

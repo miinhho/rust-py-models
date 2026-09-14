@@ -11,6 +11,7 @@ pub(super) fn render(
     name: &str,
     attr: &Options,
     params: &[String],
+    projection: &crate::projection::ProjectionMap,
 ) -> syn::Result<ModelPieces> {
     if attr.serde_rename_all_fields.is_some()
         || attr.serde_content.is_some()
@@ -23,7 +24,7 @@ pub(super) fn render(
         ));
     }
     if attr.newtype {
-        return render_newtype(data, name, attr, params);
+        return render_newtype(data, name, attr, params, projection);
     }
     let documentation = documentation(&attr.documentation);
     let dataclass = attr.dataclass;
@@ -32,7 +33,7 @@ pub(super) fn render(
         mut statements,
         hash_checks,
         ..
-    } = fields(&data.fields, &param_set, attr.serde_rename_all)?;
+    } = fields(&data.fields, &param_set, attr.serde_rename_all, projection)?;
     if let Some(tag) = &attr.serde_tag {
         python_ident(tag, proc_macro2::Span::call_site())?;
         statements.insert(
@@ -79,6 +80,7 @@ fn render_newtype(
     name: &str,
     attr: &Options,
     params: &[String],
+    projection: &crate::projection::ProjectionMap,
 ) -> syn::Result<ModelPieces> {
     if attr.dataclass.is_set() {
         return Err(syn::Error::new_spanned(
@@ -112,7 +114,7 @@ fn render_newtype(
     }
     let FieldPieces {
         specs, hash_checks, ..
-    } = fields(&data.fields, &HashSet::new(), None)?;
+    } = fields(&data.fields, &HashSet::new(), None, projection)?;
     let Some(target) = specs.into_iter().next() else {
         return Err(syn::Error::new_spanned(
             unnamed,

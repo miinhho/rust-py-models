@@ -26,6 +26,7 @@ pub use ir::{
     ModelSpec, StringEnumSpec, TypeExpr, TypeSpec,
 };
 pub use registry::{export_all, export_all_to};
+pub use rust_py_models_macros::py_models;
 pub use rust_py_models_macros::PY;
 pub use trait_py::PY;
 
