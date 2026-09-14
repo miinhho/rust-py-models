@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import datetime
-from typing import assert_type
 
 from binding.FeatureCoverage import FeatureCoverage
+from typing_extensions import assert_type
 
 
 def valid_usage(model: FeatureCoverage) -> None:
