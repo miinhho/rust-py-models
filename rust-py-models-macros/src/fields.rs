@@ -1,5 +1,4 @@
 use crate::attrs::{options, Options, RenameRule};
-use crate::projection::ProjectionMap;
 use crate::python::python_ident;
 use proc_macro2::TokenStream as Tokens;
 use quote::quote;
@@ -44,7 +43,6 @@ pub(crate) fn fields(
     fields: &Fields,
     params: &HashSet<String>,
     rename_all: Option<RenameRule>,
-    mappings: &ProjectionMap,
 ) -> syn::Result<FieldPieces> {
     let mut out = FieldPieces::default();
     let mut names = HashSet::new();
@@ -103,7 +101,7 @@ pub(crate) fn fields(
                 (spec, quote! { false })
             }
             FieldProjection::Rust(ty) => (
-                crate::type_expr::symbolic(ty, params, mappings),
+                crate::type_expr::symbolic(ty, params),
                 quote! { <#ty as ::rust_py_models::PY>::is_hashable() },
             ),
             FieldProjection::Omitted => unreachable!("omitted fields are skipped above"),

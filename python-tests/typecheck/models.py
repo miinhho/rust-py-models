@@ -5,16 +5,11 @@ from __future__ import annotations
 from binding.AuditEvent import AuditEvent, AuditEventCreated, AuditEventMutable
 from binding.Event import Event, EventCreated, EventDeleted, EventMoved
 from binding.ImmutableUser import ImmutableUser
-from binding.Inner import Inner
 from binding.Item import Item
 from binding.Left import Left
-from binding.MapHolder import MapHolder
 from binding.models.Address import Address
 from binding.Nested import Nested
-from binding.Outer import Outer
 from binding.Page import Page
-from binding.ProjectedLeft import ProjectedLeft
-from binding.ProjectedRoot import ProjectedRoot
 from binding.ResultCoverage import ResultCoverage
 from binding.ResultPage import ResultPage
 from binding.ResultRoot import ResultRoot
@@ -44,13 +39,6 @@ def valid_usage() -> None:
     )
     result_page: ResultPage[Item] = ResultPage(value=Item(id=1), history=[])
     result_root = ResultRoot(page=result_page)
-    projected_outer: Outer[Item] = Outer(inner=Inner(value=Item(id=1)))
-    projected_left: ProjectedLeft[Item] = ProjectedLeft(right=None)
-    projected_root = ProjectedRoot(
-        outer=projected_outer,
-        left=projected_left,
-        map=MapHolder(map={1: "x"}),
-    )
     _ = (
         user,
         optional_address,
@@ -60,9 +48,6 @@ def valid_usage() -> None:
         mutable_event,
         result,
         result_root,
-        projected_outer,
-        projected_left,
-        projected_root,
     )
 
 

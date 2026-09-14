@@ -1,7 +1,6 @@
 use crate::attrs::{options, Options};
 use crate::generics::GenericInfo;
 use crate::model;
-use crate::projection::ProjectionMap;
 use crate::python::python_class_ident;
 use proc_macro2::TokenStream as Tokens;
 use quote::quote;
@@ -9,22 +8,8 @@ use std::collections::HashSet;
 use syn::{Data, DeriveInput, Generics, Ident};
 
 pub(crate) fn expand(input: DeriveInput) -> syn::Result<Tokens> {
-    expand_with(input, &ProjectionMap::default(), None)
-}
-
-pub(crate) fn expand_with(
-    input: DeriveInput,
-    projection: &ProjectionMap,
-    projected_names: Option<&HashSet<String>>,
-) -> syn::Result<Tokens> {
     let mut attr = options(&input.attrs)?;
-    let generic = GenericInfo::parse(
-        &input.generics,
-        &attr,
-        &input.data,
-        projection,
-        projected_names,
-    )?;
+    let generic = GenericInfo::parse(&input.generics, &attr, &input.data)?;
     if let Some(as_type) = attr.as_type.take() {
         attr.as_type = Some(generic.concretize_type(as_type));
     }
@@ -40,11 +25,9 @@ pub(crate) fn expand_with(
         .unwrap_or_else(|| format!("{name}.py"));
 
     let implementation = if let Some(as_type) = &attr.as_type {
-        alias_impl(&ident, as_type, &attr, &generic, projection)?
+        alias_impl(&ident, as_type, &attr, &generic)?
     } else {
-        model_impl(
-            &ident, input.data, &name, &output, &attr, &generic, projection,
-        )?
+        model_impl(&ident, input.data, &name, &output, &attr, &generic)?
     };
     let registration = registration(&ident, attr.export);
     Ok(quote! {
@@ -101,7 +84,6 @@ fn alias_impl(
     as_type: &syn::Type,
     attr: &Options,
     generic: &GenericInfo,
-    projection: &ProjectionMap,
 ) -> syn::Result<Tokens> {
     if attr.export {
         return Err(syn::Error::new_spanned(
@@ -111,8 +93,8 @@ fn alias_impl(
     }
     let (impl_generics, ty_generics, where_clause) = generic.impl_generics.split_for_impl();
     let params = generic.names.iter().cloned().collect::<HashSet<_>>();
-    let concrete = crate::type_expr::concrete(as_type, &params, projection);
-    let supplied = crate::type_expr::supplied(as_type, &generic.all_names, projection);
+    let concrete = crate::type_expr::concrete(as_type, &params);
+    let supplied = crate::type_expr::supplied(as_type, &generic.all_names);
     Ok(quote! {
         impl #impl_generics ::rust_py_models::PY for #ident #ty_generics #where_clause {
             fn type_spec() -> ::rust_py_models::TypeSpec { #concrete }
@@ -132,16 +114,15 @@ fn model_pieces(
     name: &str,
     attr: &Options,
     generic: &GenericInfo,
-    projection: &ProjectionMap,
 ) -> syn::Result<model::ModelPieces> {
     match data {
         Data::Struct(data) => {
             let data = generic.concretize_struct(data);
-            model::structure(data, name, attr, &generic.names, projection)
+            model::structure(data, name, attr, &generic.names)
         }
         Data::Enum(data) => {
             let data = generic.concretize_enum(data);
-            model::enumeration(data, name, ident.span(), attr, &generic.names, projection)
+            model::enumeration(data, name, ident.span(), attr, &generic.names)
         }
         Data::Union(data) => Err(syn::Error::new_spanned(
             data.union_token,
@@ -157,12 +138,11 @@ fn model_impl(
     output: &str,
     attr: &Options,
     generic: &GenericInfo,
-    projection: &ProjectionMap,
 ) -> syn::Result<Tokens> {
     let model::ModelPieces {
         declarations,
         hashable,
-    } = model_pieces(ident, data, name, attr, generic, projection)?;
+    } = model_pieces(ident, data, name, attr, generic)?;
     let (impl_generics, ty_generics, where_clause) = generic.impl_generics.split_for_impl();
     let concrete_specs = generic.concrete_specs();
     let supplied_specs = generic.supplied_specs();

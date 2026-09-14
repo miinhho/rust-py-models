@@ -14,7 +14,6 @@ pub(super) fn render(
     span: Span,
     container: &Options,
     params: &[String],
-    projection: &crate::projection::ProjectionMap,
 ) -> syn::Result<ModelPieces> {
     let had_payload = data
         .variants
@@ -63,7 +62,6 @@ pub(super) fn render(
             tagging,
             params,
             container_documentation,
-            projection,
         )
     }
 }
@@ -159,7 +157,6 @@ fn render_payload(
     tagging: Tagging,
     params: &[String],
     container_documentation: Tokens,
-    projection: &crate::projection::ProjectionMap,
 ) -> syn::Result<ModelPieces> {
     let dataclass = container.dataclass;
     let rename_all = container.serde_rename_all;
@@ -194,7 +191,7 @@ fn render_payload(
             specs,
             hash_checks: field_hashes,
             ..
-        } = fields(&variant.fields, &param_set, rename_all_fields, projection)?;
+        } = fields(&variant.fields, &param_set, rename_all_fields)?;
         let frozen = variant_options.frozen.unwrap_or(false);
         hash_checks.push(quote! { #frozen #(&& #field_hashes)* });
         alias_names.push(class_name.clone());
