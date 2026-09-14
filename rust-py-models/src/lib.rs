@@ -3,12 +3,12 @@
 
 //! Generate importable Python model declarations from Rust structs and enums.
 //!
-//! Derive [`PY`] for model types, then use [`PY::export_all`] to write a root
-//! model and its dependencies. `#[py(export)]` provides the same workflow as a
-//! generated Rust test.
+//! Derive [`PY`] for model types, then call [`PY::export_all`] to write a root
+//! model and its dependencies. Mark roots with `#[py(export)]` and call
+//! [`export_all`] to write every registered root to the configured directory.
+//! Use [`export_all_to`] when the caller chooses the directory.
 //!
-//! Generated annotations describe Python-facing shapes. They do not convert
-//! Rust values, perform Serde serialization, or validate Python values at runtime.
+//! Generated annotations describe Python-facing shapes.
 
 mod dependency;
 mod error;
@@ -16,6 +16,7 @@ mod export;
 mod hashability;
 mod impls;
 mod ir;
+mod registry;
 mod trait_py;
 
 pub use dependency::Dependency;
@@ -24,6 +25,7 @@ pub use ir::{
     DataclassOptions, DataclassSpec, Declaration, EnumMemberSpec, FieldDefault, FieldSpec,
     ModelSpec, StringEnumSpec, TypeExpr, TypeSpec,
 };
+pub use registry::{export_all, export_all_to};
 pub use rust_py_models_macros::PY;
 pub use trait_py::PY;
 
@@ -31,4 +33,6 @@ pub use trait_py::PY;
 #[doc(hidden)]
 pub mod __private {
     pub use crate::hashability::check as check_hashability;
+    pub use crate::registry::ExportRoot;
+    pub use inventory;
 }

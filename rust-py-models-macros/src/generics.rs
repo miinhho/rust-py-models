@@ -11,7 +11,6 @@ pub(crate) struct GenericInfo {
     pub(crate) names: Vec<String>,
     type_params: Vec<Ident>,
     concrete: HashMap<String, Type>,
-    has_params: bool,
 }
 
 impl GenericInfo {
@@ -75,7 +74,6 @@ impl GenericInfo {
             names,
             type_params,
             concrete,
-            has_params: !original.params.is_empty(),
         })
     }
 
@@ -97,10 +95,6 @@ impl GenericInfo {
             concrete: &self.concrete,
         }
         .fold_type(ty)
-    }
-
-    pub(crate) fn has_params(&self) -> bool {
-        self.has_params
     }
 
     pub(crate) fn concrete_specs(&self) -> Vec<Tokens> {

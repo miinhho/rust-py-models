@@ -396,6 +396,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4f0c30c76f2f4ccee3fe55a2435f691ca00c0e4bd87abe4f4a851b1d4dac39b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -606,7 +615,7 @@ dependencies = [
 
 [[package]]
 name = "rust-py-models"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bigdecimal",
  "bson",
@@ -616,6 +625,7 @@ dependencies = [
  "fs2",
  "heapless",
  "indexmap",
+ "inventory",
  "ordered-float",
  "rust-py-models-macros",
  "semver",
@@ -629,12 +639,33 @@ dependencies = [
 
 [[package]]
 name = "rust-py-models-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "heck",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "rust-py-models-test-generator"
+version = "0.0.0"
+dependencies = [
+ "bigdecimal",
+ "bson",
+ "bytes",
+ "chrono",
+ "chrono-tz",
+ "heapless",
+ "indexmap",
+ "ordered-float",
+ "rust-py-models",
+ "semver",
+ "serde_json",
+ "smol_str",
+ "tokio",
+ "url",
+ "uuid",
 ]
 
 [[package]]

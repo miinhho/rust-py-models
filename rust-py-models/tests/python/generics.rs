@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+#[cfg(test)]
 use rust_py_models::ExportError;
 use rust_py_models::PY;
 use std::collections::HashSet;
@@ -37,6 +38,7 @@ enum Choice<T> {
 }
 
 #[derive(PY)]
+#[py(export)]
 struct Root {
     page: Page<Item>,
     paths: Page<PathBuf>,
@@ -166,13 +168,16 @@ fn generic_declarations_keep_symbolic_parameters() {
 
 #[test]
 fn exports_generic_graph() {
-    Root::export_all().unwrap();
-    Root::export_all().unwrap();
+    let dir = std::env::temp_dir().join(format!("rust-py-models-generics-{}", std::process::id()));
+    Root::export_all_to(&dir).unwrap();
+    Root::export_all_to(&dir).unwrap();
+    assert!(dir.join("Root.py").is_file());
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
 fn checks_each_generic_instantiation_before_writing() {
-    let result = MixedSets::export_all();
+    let result = MixedSets::export_to_string();
     assert!(
         matches!(&result, Err(ExportError::UnhashableType(name)) if name == "Item"),
         "{result:?}"

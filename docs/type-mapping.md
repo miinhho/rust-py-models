@@ -30,7 +30,7 @@ Use this reference to determine the annotation emitted for a Rust field. Mapping
 | `Rc::Weak<T>`, `Arc::Weak<T>` | `T | None` |
 | `Cow<'a, T>` | The mapping for borrowed `T` |
 
-Important differences from Rust remain visible only in prose, not in the annotation:
+Python annotations do not carry these Rust constraints:
 
 - `Option<T>` accepts `None` but does not make a dataclass argument optional.
 - integer mappings do not enforce Rust ranges or nonzero constraints;
@@ -66,7 +66,7 @@ For example:
 
 ```toml
 [dependencies]
-rust-py-models = { version = "0.1", features = ["chrono-impl", "uuid-impl"] }
+rust-py-models = { version = "0.1.1", features = ["chrono-impl", "uuid-impl"] }
 ```
 
 `DateTime<Tz>` maps to `datetime.datetime`; the annotation does not retain the Rust timezone parameter or validate `tzinfo`. `url::Url` maps to `str` and does not parse URLs.
@@ -75,4 +75,4 @@ rust-py-models = { version = "0.1", features = ["chrono-impl", "uuid-impl"] }
 
 `Result<T, E>` and range types require an application-specific representation and therefore have no automatic mapping.
 
-Use `#[py(as = "RustType")]` to reuse an existing safe mapping. Use `#[py(unsafe_type = "...")]` only when the application owns the unchecked Python annotation and any required runtime behavior.
+Use `#[py(as = "RustType")]` to reuse an existing mapping. Use `#[py(unsafe_type = "...")]` only when you can supply any required Python imports and dependencies and accept that the annotation is unchecked. See [generation and export](generation.md#configure-generated-declarations) for these attributes.

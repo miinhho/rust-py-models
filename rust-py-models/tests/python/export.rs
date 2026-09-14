@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 #![allow(deprecated)]
 
-use rust_py_models::{ExportError, PY};
+#[cfg(test)]
+use rust_py_models::ExportError;
+use rust_py_models::PY;
 use std::collections::HashMap;
 
 #[derive(PY)]
@@ -42,6 +44,7 @@ struct User {
 }
 
 #[derive(PY)]
+#[py(export)]
 struct Left {
     right: Option<Box<Right>>,
 }
@@ -52,6 +55,7 @@ struct Right {
 }
 
 #[derive(PY)]
+#[py(export)]
 struct CycleA {
     b: Option<Box<CycleB>>,
 }
@@ -233,6 +237,7 @@ struct PortablePathCollision {
     upper: portable_paths::Upper,
     lower: portable_paths::Lower,
 }
+
 #[test]
 fn generated_declarations_and_dependencies() {
     let text = User::export_to_string().unwrap();
@@ -361,8 +366,18 @@ fn combines_multiple_declarations_in_one_module() {
 
 #[test]
 fn export_cyclic_dependencies() {
-    Left::export_all().unwrap();
-    CycleA::export_all().unwrap();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock before Unix epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!(
+        "rust-py-models-cycles-{}-{nonce}",
+        std::process::id()
+    ));
+    Left::export_all_to(&dir).unwrap();
+    CycleA::export_all_to(&dir).unwrap();
+    assert!(dir.join("Left.py").is_file());
+    assert!(dir.join("CycleA.py").is_file());
     assert!(CycleA::export_to_string()
         .unwrap()
         .contains("from .CycleB import CycleB  # noqa: E402 - cyclic dependency"));
@@ -373,6 +388,7 @@ fn export_cyclic_dependencies() {
         ),
         "{nested}"
     );
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

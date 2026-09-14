@@ -6,7 +6,7 @@ The generated files are ordinary Python modules. They are not `.pyi` stubs, an F
 
 ## Requirements
 
-The crates require Rust 1.98 or newer. Generated modules target CPython 3.10 through 3.14.
+The crates require Rust 1.98 or newer. Generated modules target CPython 3.10 through 3.14 and can be imported without a Rust runtime in the Python environment.
 
 ## Quick start
 
@@ -14,10 +14,10 @@ Add the crate to the Rust package that owns the models:
 
 ```toml
 [dependencies]
-rust-py-models = "0.1"
+rust-py-models = "0.1.1"
 ```
 
-Derive `PY` for referenced types and add `#[py(export)]` to each export root:
+Derive `PY` for referenced types, mark the models you want to export as roots, and call an export API from a Rust entry point:
 
 ```rust
 use rust_py_models::PY;
@@ -33,15 +33,20 @@ struct User {
     id: u64,
     address: Option<Address>,
 }
+
+fn main() -> Result<(), rust_py_models::ExportError> {
+    rust_py_models::export_all()?;
+    Ok(())
+}
 ```
 
-Generate the modules by running the export tests:
+Run that entry point to generate the modules. For example, if it is in `src/main.rs`:
 
 ```sh
-cargo test export_bindings
+cargo run
 ```
 
-The default output is `bindings/` in the package directory:
+This writes `bindings/` relative to the current working directory:
 
 ```text
 bindings/
@@ -63,12 +68,13 @@ user = User(id=1, address=Address(city="Seoul"))
 
 ## Choose an export workflow
 
-- Use `#[py(export)]` when generation should run through a Rust test.
-- Use `PY::export_all()` to generate a root and all referenced models from Rust code.
-- Use `PY::export_all_to(path)` when the caller chooses the output directory.
+- Use `rust_py_models::export_all()` to generate all `#[py(export)]` roots linked into the program and their referenced models.
+- Use `rust_py_models::export_all_to(path)` to choose the directory for all registered roots.
+- Use `User::export_all()` or `User::export_all_to(path)` to export one selected root and its referenced models.
+- Use `PY::export()` to write only the selected declaration.
 - Use `PY::export_to_string()` when another tool owns file output.
 
-Set `RUST_PY_MODELS_EXPORT_DIR` to change the output directory used by generated export tests and `export_all()`.
+Set `RUST_PY_MODELS_EXPORT_DIR` to change the output directory used by APIs without an explicit path. `#[py(export)]` only registers a root; files are written when an export API is called.
 
 Generated files carry an ownership header. The exporter updates files it owns, removes obsolete owned files, and refuses to overwrite user-modified or unrelated files.
 
@@ -76,4 +82,3 @@ Generated files carry an ownership header. The exporter updates files it owns, r
 
 - [Generate models and configure `#[py(...)]`](docs/generation.md)
 - [Find the Python annotation for a Rust type](docs/type-mapping.md)
-- [Check supported Python versions](docs/compatibility.md)

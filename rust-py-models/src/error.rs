@@ -3,6 +3,9 @@ use std::path::PathBuf;
 /// Errors produced while generating Python files.
 #[derive(Debug, thiserror::Error)]
 pub enum ExportError {
+    /// No marked export roots are linked into the current executable.
+    #[error("no #[py(export)] roots are registered in this executable")]
+    NoExportRoots,
     /// The requested Rust type does not define a Python declaration.
     #[error("{0} has no Python declaration")]
     NotExportable(&'static str),

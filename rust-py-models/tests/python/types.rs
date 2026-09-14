@@ -1,13 +1,18 @@
 #![allow(dead_code)]
 
-use rust_py_models::{ExportError, PY};
+#[cfg(test)]
+use rust_py_models::ExportError;
+use rust_py_models::PY;
 use std::borrow::{Borrow, Cow};
+#[cfg(test)]
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList, VecDeque};
 use std::net::{IpAddr, SocketAddr};
 use std::num::NonZeroU64;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::Arc;
+#[cfg(test)]
+use std::sync::{Mutex, RwLock, Weak};
 use std::time::{Duration, SystemTime};
 
 #[derive(PY, Clone)]
@@ -276,6 +281,7 @@ fn chrono_feature_maps_temporal_types() {
 
 #[cfg(feature = "serde-json-impl")]
 #[derive(PY)]
+#[py(export)]
 struct JsonPayload {
     value: serde_json::Value,
     map: serde_json::Map<String, serde_json::Value>,
@@ -293,7 +299,6 @@ fn serde_json_feature_maps_dynamic_values() {
     let text = JsonPayload::export_to_string().unwrap();
     assert!(text.contains("from typing import TypeAlias"));
     assert!(text.contains("value: _PyRsJsonValue"));
-    JsonPayload::export_all().unwrap();
 }
 
 #[cfg(feature = "url-impl")]

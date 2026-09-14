@@ -1,6 +1,6 @@
 [package]
 name = "rust-py-models"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version.workspace = true
 license = "MIT"
@@ -10,7 +10,7 @@ repository = "https://github.com/miinhho/rust-py-models"
 readme = "../README.md"
 
 [dependencies]
-rust-py-models-macros = { path = "../rust-py-models-macros", version = "0.1.0" }
+rust-py-models-macros = { path = "../rust-py-models-macros", version = "0.1.1" }
 bytes = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, optional = true }
 bigdecimal = { version = "0.4", optional = true }
@@ -26,6 +26,7 @@ url = { version = "2", default-features = false, optional = true }
 uuid = { version = "1", optional = true }
 fs2 = "0.4"
 thiserror = "2"
+inventory = "0.3.24"
 
 [features]
 default = []
@@ -46,4 +47,3 @@ tokio-impl = ["dep:tokio"]
 
 [dev-dependencies]
 chrono-tz = "0.10"
-

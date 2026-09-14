@@ -51,6 +51,10 @@ Write for the reader performing a task:
 - do not narrate code that is already clear from names and types;
 - update mapping and generation docs in the same change as user-visible behavior.
 
+## Releases
+
+Publish only through `.github/workflows/release.yml` and the protected `crates-io` environment. Keep the macro crate dependency version aligned and publish the macro crate before `rust-py-models`.
+
 ## Verification
 
 Run formatting and Clippy for every Rust change:

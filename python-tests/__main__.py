@@ -113,10 +113,17 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.check_only:
+        run("cargo", "test", "--workspace", "--all-features", "--locked")
         shutil.rmtree(BINDINGS, ignore_errors=True)
-        env = os.environ.copy()
-        env["RUST_PY_MODELS_EXPORT_DIR"] = str(BINDINGS)
-        run("cargo", "test", "--workspace", "--all-features", "--locked", env=env)
+        run(
+            "cargo",
+            "run",
+            "--package",
+            "rust-py-models-test-generator",
+            "--locked",
+            "--",
+            str(BINDINGS),
+        )
     check(BINDINGS)
 
 

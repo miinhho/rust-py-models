@@ -1,0 +1,46 @@
+[package]
+name = "rust-py-models-test-generator"
+version = "0.0.0"
+edition = "2021"
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "rust-py-models-test-generator"
+path = "src/main.rs"
+test = false
+bench = false
+
+[features]
+default = ["serde-compat", "bytes-impl", "chrono-impl", "serde-json-impl", "url-impl", "uuid-impl", "bigdecimal-impl", "bson-impl", "heapless-impl", "indexmap-impl", "ordered-float-impl", "semver-impl", "smol-str-impl", "tokio-impl"]
+serde-compat = ["rust-py-models/serde-compat"]
+bytes-impl = ["rust-py-models/bytes-impl"]
+chrono-impl = ["rust-py-models/chrono-impl"]
+serde-json-impl = ["rust-py-models/serde-json-impl"]
+url-impl = ["rust-py-models/url-impl"]
+uuid-impl = ["rust-py-models/uuid-impl"]
+bigdecimal-impl = ["rust-py-models/bigdecimal-impl"]
+bson-impl = ["rust-py-models/bson-impl"]
+heapless-impl = ["rust-py-models/heapless-impl"]
+indexmap-impl = ["rust-py-models/indexmap-impl"]
+ordered-float-impl = ["rust-py-models/ordered-float-impl"]
+semver-impl = ["rust-py-models/semver-impl"]
+smol-str-impl = ["rust-py-models/smol-str-impl"]
+tokio-impl = ["rust-py-models/tokio-impl"]
+
+[dependencies]
+rust-py-models = { path = "../../rust-py-models" }
+bytes = "1"
+chrono = { version = "0.4", default-features = false }
+chrono-tz = "0.10"
+bigdecimal = "0.4"
+bson = { version = "2", default-features = false, features = ["uuid-1"] }
+heapless = "0.8"
+indexmap = "2"
+ordered-float = "4"
+semver = "1"
+smol_str = "0.3"
+tokio = { version = "1", features = ["sync"] }
+serde_json = "1"
+url = { version = "2", default-features = false }
+uuid = "1"

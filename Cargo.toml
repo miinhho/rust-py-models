@@ -1,5 +1,5 @@
 [workspace]
-members = ["rust-py-models", "rust-py-models-macros"]
+members = ["rust-py-models", "rust-py-models-macros", "python-tests/generator"]
 resolver = "2"
 
 [workspace.package]

@@ -10,8 +10,6 @@ permissions:
 jobs:
   rust:
     runs-on: ubuntu-24.04
-    env:
-      RUST_PY_MODELS_EXPORT_DIR: python-tests/binding
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.98.0
@@ -24,8 +22,11 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Test Rust without optional features
         run: cargo test --workspace --locked
-      - name: Test Rust and generate Python bindings
+      - name: Test Rust with all features
         run: cargo test --workspace --all-features --locked
+
+      - name: Generate Python bindings
+        run: cargo run --package rust-py-models-test-generator --locked -- python-tests/binding
 
       - name: Save generated Python bindings
         uses: actions/upload-artifact@v7
