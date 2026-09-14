@@ -1,6 +1,6 @@
 use crate::type_expr::type_args;
 use std::collections::HashMap;
-use syn::Type;
+use syn::{GenericArgument, PathArguments, Type};
 
 #[derive(Default)]
 pub(crate) struct ProjectionMap {
@@ -35,6 +35,7 @@ impl ProjectionMap {
             .map(|(index, arg)| {
                 let visible = selected.map_or_else(
                     || match name.as_str() {
+                        "Result" if is_result_path(path) => index == 0,
                         "HashMap" | "IndexMap" => index < 2,
                         "HashSet" | "IndexSet" => index == 0,
                         "DateTime" => false,
@@ -46,4 +47,30 @@ impl ProjectionMap {
             })
             .collect()
     }
+}
+
+fn is_result_path(path: &syn::TypePath) -> bool {
+    let segments = path.path.segments.iter().collect::<Vec<_>>();
+    let path_matches = match segments.as_slice() {
+        [result] => result.ident == "Result",
+        [root, module, result] => {
+            (root.ident == "std" || root.ident == "core")
+                && module.ident == "result"
+                && result.ident == "Result"
+        }
+        _ => false,
+    };
+    if !path_matches {
+        return false;
+    }
+    let Some(last) = segments.last() else {
+        return false;
+    };
+    let PathArguments::AngleBracketed(arguments) = &last.arguments else {
+        return false;
+    };
+    matches!(
+        arguments.args.iter().collect::<Vec<_>>().as_slice(),
+        [GenericArgument::Type(_), GenericArgument::Type(_)]
+    )
 }

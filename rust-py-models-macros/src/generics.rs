@@ -2,7 +2,7 @@ use crate::attrs::{options, Options};
 use crate::fields::{project_field, FieldProjection};
 use crate::projection::ProjectionMap;
 use crate::python::python_class_ident;
-use crate::type_expr::{is_param, result_args};
+use crate::type_expr::is_param;
 use proc_macro2::TokenStream as Tokens;
 use quote::quote;
 use std::collections::{HashMap, HashSet};
@@ -194,10 +194,6 @@ fn collect_usage(
     projection: &ProjectionMap,
     visible: &mut HashSet<String>,
 ) {
-    if let Some((ok, _)) = result_args(ty) {
-        collect_usage(ok, declared, projection, visible);
-        return;
-    }
     if let Some(param) = is_param(ty, declared) {
         visible.insert(param);
     }

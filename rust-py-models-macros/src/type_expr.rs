@@ -32,38 +32,6 @@ pub(crate) fn type_args(ty: &Type) -> Vec<&Type> {
     }
 }
 
-pub(crate) fn result_args(ty: &Type) -> Option<(&Type, &Type)> {
-    let Type::Path(path) = ty else {
-        return None;
-    };
-    if path.qself.is_some() {
-        return None;
-    }
-    let segments = path.path.segments.iter().collect::<Vec<_>>();
-    let is_result = match segments.as_slice() {
-        [result] => result.ident == "Result",
-        [root, module, result] => {
-            (root.ident == "std" || root.ident == "core")
-                && module.ident == "result"
-                && result.ident == "Result"
-        }
-        _ => false,
-    };
-    if !is_result {
-        return None;
-    }
-    let PathArguments::AngleBracketed(arguments) = &segments.last()?.arguments else {
-        return None;
-    };
-    let mut args = arguments.args.iter();
-    let (Some(GenericArgument::Type(ok)), Some(GenericArgument::Type(err)), None) =
-        (args.next(), args.next(), args.next())
-    else {
-        return None;
-    };
-    Some((ok, err))
-}
-
 pub(crate) fn is_param(ty: &Type, params: &HashSet<String>) -> Option<String> {
     if let Type::Path(path) = ty {
         if path.qself.is_none() && path.path.segments.len() == 1 {
@@ -85,9 +53,6 @@ fn contains_param(ty: &Type, params: &HashSet<String>, projection: &ProjectionMa
 }
 
 pub(crate) fn symbolic(ty: &Type, params: &HashSet<String>, projection: &ProjectionMap) -> Tokens {
-    if let Some((ok, _)) = result_args(ty) {
-        return symbolic(ok, params, projection);
-    }
     if let Some(param) = is_param(ty, params) {
         return quote! {
             ::rust_py_models::TypeSpec::symbolic(
@@ -120,9 +85,6 @@ pub(crate) fn symbolic(ty: &Type, params: &HashSet<String>, projection: &Project
 }
 
 pub(crate) fn concrete(ty: &Type, params: &HashSet<String>, projection: &ProjectionMap) -> Tokens {
-    if let Some((ok, _)) = result_args(ty) {
-        return concrete(ok, params, projection);
-    }
     if is_param(ty, params).is_some() {
         return quote! { <#ty as ::rust_py_models::PY>::type_spec() };
     }
@@ -157,9 +119,6 @@ fn supplied_inner(
     params_set: &HashSet<String>,
     projection: &ProjectionMap,
 ) -> Tokens {
-    if let Some((ok, _)) = result_args(ty) {
-        return supplied_inner(ok, params, params_set, projection);
-    }
     if let Some(param) = is_param(ty, params_set) {
         let index = params
             .iter()
