@@ -199,7 +199,7 @@ fn field_name(
     )
 }
 
-fn is_phantom_data(ty: &syn::Type) -> bool {
+pub(crate) fn is_phantom_data(ty: &syn::Type) -> bool {
     let syn::Type::Path(path) = ty else {
         return false;
     };

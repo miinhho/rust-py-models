@@ -57,6 +57,18 @@ struct FrozenWithList {
     values: Vec<u8>,
 }
 
+struct UnmappedError;
+
+#[derive(PY)]
+#[py(export)]
+struct ResultCoverage {
+    item: Result<Nested, UnmappedError>,
+    items: Vec<Result<Nested, UnmappedError>>,
+    optional: Option<Result<String, UnmappedError>>,
+    #[py(as = "String")]
+    overridden: Result<u64, UnmappedError>,
+}
+
 #[derive(PY)]
 #[py(frozen)]
 struct RecursiveKey {
@@ -193,6 +205,11 @@ fn additional_standard_types_use_serialized_python_shapes() {
     assert_eq!(Mutex::<u64>::inline(), "int");
     assert_eq!(RwLock::<String>::inline(), "str");
     assert_eq!(Weak::<String>::inline(), "str | None");
+    assert_eq!(Result::<Nested, UnmappedError>::inline(), "Nested");
+    assert_eq!(
+        Vec::<Result<Nested, UnmappedError>>::inline(),
+        "list[Nested]"
+    );
 }
 
 struct BorrowedShape;

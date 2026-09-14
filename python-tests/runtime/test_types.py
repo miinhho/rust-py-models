@@ -12,11 +12,26 @@ import uuid
 from binding.FeatureCoverage import FeatureCoverage
 from binding.JsonPayload import JsonPayload
 from binding.Nested import Nested
+from binding.ResultCoverage import ResultCoverage
 from binding.TypeCoverage import TypeCoverage
 from binding.ZeroArray import ZeroArray
 
 
 class TypeMappingContracts(unittest.TestCase):
+    def test_result_exposes_only_success_values(self) -> None:
+        self.assertEqual(
+            typing.get_type_hints(ResultCoverage),
+            {
+                "item": Nested,
+                "items": list[Nested],
+                "optional": str | None,
+                "overridden": str,
+            },
+        )
+        item = Nested(id=1)
+        model = ResultCoverage(item=item, items=[item], optional=None, overridden="id")
+        self.assertIs(model.item, item)
+
     def test_standard_type_annotations_resolve(self) -> None:
         self.assertEqual(
             typing.get_type_hints(TypeCoverage),

@@ -18,6 +18,7 @@ Use this reference to determine the annotation emitted for a Rust field. Mapping
 | `Duration` | `datetime.timedelta` |
 | `SystemTime` | `datetime.datetime` |
 | `Option<T>` | `T | None` |
+| `Result<T, E>` | `T` |
 | `Vec<T>`, `LinkedList<T>`, `BinaryHeap<T>`, `[T]`, `&[T]` | `list[T]` |
 | `VecDeque<T>` | `collections.deque[T]` |
 | `HashSet<T, S>`, `BTreeSet<T>` | `set[T]` |
@@ -33,12 +34,15 @@ Use this reference to determine the annotation emitted for a Rust field. Mapping
 Python annotations do not carry these Rust constraints:
 
 - `Option<T>` accepts `None` but does not make a dataclass argument optional.
+- `Result<T, E>` describes only the `Ok` value. The exporter does not handle `Err`; resolve errors before supplying values to Python.
 - integer mappings do not enforce Rust ranges or nonzero constraints;
 - `char` does not enforce a one-character string;
 - arrays longer than 12 elements do not retain their exact length;
 - ownership, borrowing, locking, and `Cow` ownership state are not represented.
 
 The exporter rejects a set element or dictionary key when its generated Python type is known to be unhashable. A derived dataclass is hashable only when its dataclass options and fields make it hashable.
+
+When a generic parameter appears only as the `E` of `Result<T, E>`, the generated Python model omits that parameter. Other uses of the parameter retain it.
 
 ## Optional crate mappings
 
@@ -73,6 +77,6 @@ rust-py-models = { version = "0.1.1", features = ["chrono-impl", "uuid-impl"] }
 
 ## Types without a default mapping
 
-`Result<T, E>` and range types require an application-specific representation and therefore have no automatic mapping.
+Range types require an application-specific representation and therefore have no automatic mapping.
 
 Use `#[py(as = "RustType")]` to reuse an existing mapping. Use `#[py(unsafe_type = "...")]` only when you can supply any required Python imports and dependencies and accept that the annotation is unchecked. See [generation and export](generation.md#configure-generated-declarations) for these attributes.

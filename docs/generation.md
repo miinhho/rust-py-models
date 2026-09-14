@@ -102,6 +102,8 @@ Construct `EventLogin` or `EventLogout`; `Event` is an annotation, not a base cl
 
 `unsafe_type` is unchecked. The optional `import` adds a Python module import, but the exporter does not install the module, verify the annotation, or export models mentioned inside it. Prefer `as` when an existing Rust type has the mapping you need.
 
+`Result<T, E>` fields use the mapping for `T` by default, including results inside collections. Use `as` on a field when its Python representation differs. The exporter only generates annotations; it does not turn `Err` into an exception or remove error values.
+
 Dataclass options default to `False`; explicit `false` values are accepted. Options on a payload enum apply to every generated variant unless a variant overrides them. Unit-only enums reject dataclass options.
 
 ## Use Serde names and shapes

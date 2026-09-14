@@ -52,6 +52,36 @@ struct GenericSet<T> {
     items: HashSet<T>,
 }
 
+struct HiddenError;
+
+#[derive(PY)]
+struct ResultPage<T, E> {
+    value: Result<T, E>,
+    history: Vec<std::result::Result<T, E>>,
+}
+
+#[derive(PY)]
+#[py(as = "Result<T, E>")]
+struct ResultAlias<E, T>(E, T);
+
+#[derive(PY)]
+struct ResultWithError<T, E> {
+    value: Result<T, E>,
+    detail: E,
+}
+
+#[derive(PY)]
+enum ResultChoice<T, E> {
+    Ready(Result<T, E>),
+    Empty,
+}
+
+#[derive(PY)]
+#[py(export)]
+struct ResultRoot {
+    page: ResultPage<Item, HiddenError>,
+}
+
 #[derive(PY)]
 struct MixedSets {
     valid: GenericSet<u64>,
@@ -199,6 +229,14 @@ fn supports_as_concrete_and_explicit_bounds() {
         ConcretePage::<NotPython, Item>::inline(),
         "ConcretePage[Item]"
     );
+    assert_eq!(
+        ConcretePage::<NotPython, Item>::type_spec_with(&[
+            rust_py_models::TypeSpec::named("ignored"),
+            rust_py_models::TypeSpec::named("Item"),
+        ])
+        .annotation(),
+        "ConcretePage[Item]"
+    );
 
     assert!(ExplicitBound::<Item>::export_to_string()
         .unwrap()
@@ -214,6 +252,47 @@ fn supports_as_concrete_and_explicit_bounds() {
         "T"
     );
     assert!(TransparentId::model_spec().unwrap().is_none());
+}
+
+#[test]
+fn result_error_generic_is_absent_from_python_model() {
+    assert_eq!(
+        ResultPage::<Item, HiddenError>::inline(),
+        "ResultPage[Item]"
+    );
+    assert_eq!(
+        ResultPage::<Item, HiddenError>::type_spec_with(&[
+            rust_py_models::TypeSpec::named("Item"),
+            rust_py_models::TypeSpec::named("ignored"),
+        ])
+        .annotation(),
+        "ResultPage[Item]"
+    );
+    let page = ResultPage::<Item, HiddenError>::export_to_string().unwrap();
+    assert!(page.contains("class ResultPage(Generic[T]):"), "{page}");
+    assert!(page.contains("value: T"), "{page}");
+    assert!(page.contains("history: list[T]"), "{page}");
+    let root = ResultRoot::export_to_string().unwrap();
+    assert!(root.contains("page: ResultPage[Item]"), "{root}");
+    assert_eq!(ResultAlias::<HiddenError, Item>::inline(), "Item");
+    assert_eq!(
+        ResultAlias::<HiddenError, Item>::type_spec_with(&[
+            rust_py_models::TypeSpec::named("wrong"),
+            rust_py_models::TypeSpec::named("right"),
+        ])
+        .annotation(),
+        "right"
+    );
+    let visible_error = ResultWithError::<Item, String>::export_to_string().unwrap();
+    assert!(
+        visible_error.contains("class ResultWithError(Generic[T, E]):"),
+        "{visible_error}"
+    );
+    let choice = ResultChoice::<Item, HiddenError>::export_to_string().unwrap();
+    assert!(
+        choice.contains("class ResultChoiceReady(Generic[T]):"),
+        "{choice}"
+    );
 }
 
 #[test]

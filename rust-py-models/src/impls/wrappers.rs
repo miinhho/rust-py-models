@@ -11,6 +11,16 @@ impl<T: PY> PY for Option<T> {
     }
 }
 
+impl<T: PY, E> PY for Result<T, E> {
+    fn type_spec() -> TypeSpec {
+        T::type_spec()
+    }
+
+    fn type_spec_with(args: &[TypeSpec]) -> TypeSpec {
+        args[0].clone()
+    }
+}
+
 macro_rules! transparent {
     ($($ty:ty),* $(,)?) => {$ (
         impl<T: PY> PY for $ty {

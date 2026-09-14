@@ -9,7 +9,7 @@ use syn::{Data, DeriveInput, Generics, Ident};
 
 pub(crate) fn expand(input: DeriveInput) -> syn::Result<Tokens> {
     let mut attr = options(&input.attrs)?;
-    let generic = GenericInfo::parse(&input.generics, &attr)?;
+    let generic = GenericInfo::parse(&input.generics, &attr, &input.data)?;
     if let Some(as_type) = attr.as_type.take() {
         attr.as_type = Some(generic.concretize_type(as_type));
     }
@@ -94,7 +94,7 @@ fn alias_impl(
     let (impl_generics, ty_generics, where_clause) = generic.impl_generics.split_for_impl();
     let params = generic.names.iter().cloned().collect::<HashSet<_>>();
     let concrete = crate::type_expr::concrete(as_type, &params);
-    let supplied = crate::type_expr::supplied(as_type, &generic.names);
+    let supplied = crate::type_expr::supplied(as_type, &generic.all_names);
     Ok(quote! {
         impl #impl_generics ::rust_py_models::PY for #ident #ty_generics #where_clause {
             fn type_spec() -> ::rust_py_models::TypeSpec { #concrete }
@@ -145,6 +145,7 @@ fn model_impl(
     } = model_pieces(ident, data, name, attr, generic)?;
     let (impl_generics, ty_generics, where_clause) = generic.impl_generics.split_for_impl();
     let concrete_specs = generic.concrete_specs();
+    let supplied_specs = generic.supplied_specs();
     let typevars = &generic.names;
     Ok(quote! {
         impl #impl_generics ::rust_py_models::PY for #ident #ty_generics #where_clause {
@@ -168,7 +169,7 @@ fn model_impl(
                 let hashable = ::rust_py_models::__private::check_hashability::<Self>(|| #hashable);
                 ::rust_py_models::TypeSpec::model(
                     #name,
-                    args.to_vec(),
+                    vec![#(#supplied_specs),*],
                     ::rust_py_models::Dependency::of::<Self>(
                         concat!(module_path!(), "::", stringify!(#ident)),
                         #name,
