@@ -225,6 +225,12 @@ mod projected_graph {
         outer: Outer<Item, HiddenError>,
     }
 
+    #[cfg(feature = "indexmap-impl")]
+    #[derive(PY)]
+    pub(super) struct OptionalIndexMap<K, V, S> {
+        map: indexmap::IndexMap<K, V, S>,
+    }
+
     pub(super) fn verify() {
         let outer = Outer::<Item, HiddenError>::export_to_string().unwrap();
         assert!(outer.contains("class Outer(Generic[T]):"), "{outer}");
@@ -252,6 +258,16 @@ mod projected_graph {
             visible.contains("right: VisibleRight[T, E] | None"),
             "{visible}"
         );
+
+        #[cfg(feature = "indexmap-impl")]
+        {
+            let optional =
+                OptionalIndexMap::<u64, String, HiddenError>::export_to_string().unwrap();
+            assert!(
+                optional.contains("class OptionalIndexMap(Generic[K, V]):"),
+                "{optional}"
+            );
+        }
     }
 }
 

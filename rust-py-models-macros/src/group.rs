@@ -96,11 +96,16 @@ pub(crate) fn expand(mut module: ItemMod) -> syn::Result<Tokens> {
             .filter(|(_, used)| **used)
             .map(|(param, _)| param.ident.to_string())
             .collect::<HashSet<_>>();
-        implementations.push(derive::expand_with(
-            input.clone(),
-            &projection,
-            Some(&names),
-        )?);
+        let cfg = input
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("cfg"))
+            .cloned()
+            .collect::<Vec<_>>();
+        implementations.push((
+            cfg,
+            derive::expand_with(input.clone(), &projection, Some(&names))?,
+        ));
     }
 
     let (_, items) = module.content.as_mut().expect("inline module");
@@ -125,8 +130,15 @@ pub(crate) fn expand(mut module: ItemMod) -> syn::Result<Tokens> {
         }
     }
     let (brace, mut items) = module.content.take().expect("inline module");
-    for implementation in implementations {
-        items.extend(syn::parse2::<syn::File>(implementation)?.items);
+    for (cfg, implementation) in implementations {
+        for mut item in syn::parse2::<syn::File>(implementation)?.items {
+            match &mut item {
+                Item::Impl(item) => item.attrs.extend(cfg.clone()),
+                Item::Macro(item) => item.attrs.extend(cfg.clone()),
+                _ => {}
+            }
+            items.push(item);
+        }
     }
     module.content = Some((brace, items));
     Ok(quote! { #module })
