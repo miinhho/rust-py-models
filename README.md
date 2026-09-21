@@ -14,7 +14,7 @@ Add the crate to the Rust package that owns the models:
 
 ```toml
 [dependencies]
-rust-py-models = "0.1.1"
+rust-py-models = "0.2.0"
 ```
 
 Derive `PY` for referenced types, mark the models you want to export as roots, and call an export API from a Rust entry point:
