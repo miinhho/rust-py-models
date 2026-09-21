@@ -44,6 +44,8 @@ The exporter rejects a set element or dictionary key when its generated Python t
 
 Generic parameters unused by the generated Python shape are omitted, including parameters hidden through other derived models. This includes `E` used only as the error argument of `Result<T, E>` and `S` used only as the hasher argument of `HashMap<K, V, S>` or `HashSet<T, S>`. A parameter used by another Python field remains exposed. See [generics and documentation](generation.md#generics-and-documentation).
 
+This projection is transitive. If `Outer<T, E>` contains `Inner<T, E>` and `Inner` uses `E` only as the error type of `Result<T, E>`, both generated classes expose only `T`. Derived models can be connected across package modules and through explicit import aliases.
+
 ## Optional crate mappings
 
 Enable the corresponding Cargo feature on `rust-py-models`:

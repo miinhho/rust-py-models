@@ -142,6 +142,22 @@ mod models {
 
 Both classes expose only `T`, so `Outer<MyType, MyError>` needs `MyType: PY` but not `MyError: PY`. A parameter used by another Python field remains exposed. The derive must be able to find generic models in the package's Rust module files. For a type whose definition is outside the package or unavailable to source analysis, its type parameters are treated as visible.
 
+The generated declarations therefore have this shape:
+
+```python
+T = TypeVar("T")
+
+@dataclass
+class Inner(Generic[T]):
+    value: T
+
+@dataclass
+class Outer(Generic[T]):
+    inner: Inner[T]
+```
+
+Related models may be declared in different modules or in either source order. Normal Rust paths and explicit `use` aliases are resolved automatically; no grouping attribute is required. Definitions outside the package are handled conservatively because their Python-visible parameters cannot be inspected.
+
 `#[py(export)]` cannot be placed on a generic root. Export a concrete instantiation from your Rust entry point:
 
 ```rust
