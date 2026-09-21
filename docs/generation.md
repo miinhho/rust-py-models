@@ -102,6 +102,8 @@ Construct `EventLogin` or `EventLogout`; `Event` is an annotation, not a base cl
 
 `unsafe_type` is unchecked. The optional `import` adds a Python module import, but the exporter does not install the module, verify the annotation, or export models mentioned inside it. Prefer `as` when an existing Rust type has the mapping you need.
 
+`Result<T, E>` fields use the mapping for `T` by default, including results inside collections. Use `as` on a field when its Python representation differs. This mapping describes the generated Python field type; it does not transform a Rust `Result` value.
+
 Dataclass options default to `False`; explicit `false` values are accepted. Options on a payload enum apply to every generated variant unless a variant overrides them. Unit-only enums reject dataclass options.
 
 ## Use Serde names and shapes
@@ -119,6 +121,42 @@ Serde `tag` adds an `init=False` `Literal[...]` discriminator. `tag` with `conte
 ## Generics and documentation
 
 Rust type parameters become Python `TypeVar` and `Generic` declarations. Lifetimes are omitted, and `PhantomData<T>` fields are not generated. Const generics and generic `#[py(newtype)]` declarations are unsupported.
+
+`#[derive(PY)]` analyzes derived models across the package before generating their implementations. A type parameter is exposed only if it contributes to a generated Python field, including through another derived model. This also applies across modules and to mutually recursive models:
+
+```rust
+mod models {
+    use rust_py_models::PY;
+
+    #[derive(PY)]
+    pub struct Inner<T, E> {
+        value: Result<T, E>,
+    }
+
+    #[derive(PY)]
+    pub struct Outer<T, E> {
+        inner: Inner<T, E>,
+    }
+}
+```
+
+Both classes expose only `T`, so `Outer<MyType, MyError>` needs `MyType: PY` but not `MyError: PY`. A parameter used by another Python field remains exposed. The derive must be able to find generic models in the package's Rust module files. For a type whose definition is outside the package or unavailable to source analysis, its type parameters are treated as visible.
+
+The generated declarations therefore have this shape:
+
+```python
+T = TypeVar("T")
+
+@dataclass
+class Inner(Generic[T]):
+    value: T
+
+@dataclass
+class Outer(Generic[T]):
+    inner: Inner[T]
+```
+
+Related models may be declared in different modules or in either source order. Normal Rust paths and explicit `use` aliases are resolved automatically; no grouping attribute is required. Definitions outside the package are handled conservatively because their Python-visible parameters cannot be inspected.
 
 `#[py(export)]` cannot be placed on a generic root. Export a concrete instantiation from your Rust entry point:
 

@@ -52,6 +52,53 @@ struct GenericSet<T> {
     items: HashSet<T>,
 }
 
+struct HiddenError;
+
+#[derive(PY)]
+struct ResultPage<T, E> {
+    value: Result<T, E>,
+    history: Vec<std::result::Result<T, E>>,
+}
+
+#[derive(PY)]
+#[py(as = "Result<T, E>")]
+struct ResultAlias<E, T>(E, T);
+
+#[derive(PY)]
+struct ResultWithError<T, E> {
+    value: Result<T, E>,
+    detail: E,
+}
+
+#[derive(PY)]
+enum ResultChoice<T, E> {
+    Ready(Result<T, E>),
+    Empty,
+}
+
+#[derive(PY)]
+#[py(export)]
+struct ResultRoot {
+    page: ResultPage<Item, HiddenError>,
+}
+
+#[derive(PY)]
+struct PlainMapHolder<K, V, S> {
+    map: std::collections::HashMap<K, V, S>,
+}
+
+#[cfg(feature = "indexmap-impl")]
+#[derive(PY)]
+struct IndexedMapHolder<K, V, S> {
+    map: indexmap::IndexMap<K, V, S>,
+}
+
+#[cfg(feature = "chrono-impl")]
+#[derive(PY)]
+struct DateTimeHolder<Tz: chrono::TimeZone> {
+    value: chrono::DateTime<Tz>,
+}
+
 #[derive(PY)]
 struct MixedSets {
     valid: GenericSet<u64>,
@@ -128,6 +175,223 @@ struct GenericEdgeRoot {
     default_page: DefaultPage,
 }
 
+mod projected_graph {
+    use super::{HiddenError, Item};
+    use rust_py_models::PY;
+    use std::collections::HashMap;
+
+    #[derive(PY)]
+    pub(super) struct Inner<T, E> {
+        value: Result<T, E>,
+    }
+
+    #[derive(PY)]
+    pub(super) struct Outer<T, E> {
+        inner: Inner<T, E>,
+    }
+
+    #[derive(PY)]
+    pub(super) struct ProjectedLeft<T, E> {
+        right: Option<Box<ProjectedRight<T, E>>>,
+    }
+
+    #[derive(PY)]
+    pub(super) struct ProjectedRight<T, E> {
+        left: Option<Box<ProjectedLeft<T, E>>>,
+        value: Result<T, E>,
+    }
+
+    #[derive(PY)]
+    pub(super) struct MapHolder<K, V, S> {
+        map: HashMap<K, V, S>,
+    }
+
+    #[derive(PY)]
+    pub(super) struct VisibleLeft<T, E> {
+        right: Option<Box<VisibleRight<T, E>>>,
+    }
+
+    #[derive(PY)]
+    pub(super) struct VisibleRight<T, E> {
+        left: Option<Box<VisibleLeft<T, E>>>,
+        value: Result<T, E>,
+        error: E,
+    }
+
+    #[derive(PY)]
+    #[py(export)]
+    pub(super) struct GraphRoot {
+        outer: Outer<Item, HiddenError>,
+    }
+
+    #[cfg(feature = "indexmap-impl")]
+    #[derive(PY)]
+    pub(super) struct OptionalIndexMap<K, V, S> {
+        map: indexmap::IndexMap<K, V, S>,
+    }
+
+    pub(super) fn verify() {
+        let outer = Outer::<Item, HiddenError>::export_to_string().unwrap();
+        assert!(outer.contains("class Outer(Generic[T]):"), "{outer}");
+        assert!(outer.contains("inner: Inner[T]"), "{outer}");
+        assert_eq!(Outer::<Item, HiddenError>::inline(), "Outer[Item]");
+
+        let left = ProjectedLeft::<Item, HiddenError>::export_to_string().unwrap();
+        assert!(left.contains("class ProjectedLeft(Generic[T]):"), "{left}");
+        assert!(left.contains("right: ProjectedRight[T] | None"), "{left}");
+        assert_eq!(
+            ProjectedLeft::<Item, HiddenError>::inline(),
+            "ProjectedLeft[Item]"
+        );
+
+        let map = MapHolder::<u64, String, HiddenError>::export_to_string().unwrap();
+        assert!(map.contains("class MapHolder(Generic[K, V]):"), "{map}");
+        assert!(map.contains("map: dict[K, V]"), "{map}");
+
+        let visible = VisibleLeft::<Item, String>::export_to_string().unwrap();
+        assert!(
+            visible.contains("class VisibleLeft(Generic[T, E]):"),
+            "{visible}"
+        );
+        assert!(
+            visible.contains("right: VisibleRight[T, E] | None"),
+            "{visible}"
+        );
+
+        #[cfg(feature = "indexmap-impl")]
+        {
+            let optional =
+                OptionalIndexMap::<u64, String, HiddenError>::export_to_string().unwrap();
+            assert!(
+                optional.contains("class OptionalIndexMap(Generic[K, V]):"),
+                "{optional}"
+            );
+        }
+    }
+}
+
+mod across_modules {
+    use super::Item;
+    use rust_py_models::PY;
+
+    struct Hidden;
+
+    pub(super) mod inner {
+        use super::PY;
+
+        #[derive(PY)]
+        pub(super) struct Inner<T, E> {
+            value: Result<T, E>,
+        }
+    }
+
+    mod outer {
+        use super::{inner::Inner as BoundInner, PY};
+
+        #[derive(PY)]
+        pub(super) struct Outer<T, E> {
+            inner: super::inner::Inner<T, E>,
+        }
+
+        #[derive(PY)]
+        pub(super) struct AliasedOuter<T, E> {
+            inner: BoundInner<T, E>,
+        }
+    }
+
+    pub(super) fn verify() {
+        let rendered = outer::Outer::<Item, Hidden>::export_to_string().unwrap();
+        assert!(rendered.contains("class Outer(Generic[T]):"), "{rendered}");
+        assert!(rendered.contains("inner: Inner[T]"), "{rendered}");
+        let aliased = outer::AliasedOuter::<Item, Hidden>::export_to_string().unwrap();
+        assert!(
+            aliased.contains("class AliasedOuter(Generic[T]):"),
+            "{aliased}"
+        );
+    }
+}
+
+mod duplicate_names {
+    use super::Item;
+    use rust_py_models::PY;
+
+    struct Hidden;
+
+    mod hidden {
+        use super::PY;
+
+        #[derive(PY)]
+        pub(super) struct Inner<T, E> {
+            value: Result<T, E>,
+        }
+
+        #[derive(PY)]
+        pub(super) struct Outer<T, E> {
+            inner: Inner<T, E>,
+        }
+    }
+
+    mod visible {
+        use super::PY;
+
+        #[derive(PY)]
+        pub(super) struct Inner<T, E> {
+            value: Result<T, E>,
+            error: E,
+        }
+
+        #[derive(PY)]
+        pub(super) struct Outer<T, E> {
+            inner: Inner<T, E>,
+        }
+    }
+
+    pub(super) fn verify() {
+        let hidden = hidden::Outer::<Item, Hidden>::export_to_string().unwrap();
+        assert!(hidden.contains("class Outer(Generic[T]):"), "{hidden}");
+        let visible = visible::Outer::<Item, String>::export_to_string().unwrap();
+        assert!(visible.contains("class Outer(Generic[T, E]):"), "{visible}");
+    }
+}
+
+#[derive(PY)]
+#[py(export)]
+struct ProjectedRoot {
+    outer: projected_graph::Outer<Item, HiddenError>,
+    left: projected_graph::ProjectedLeft<Item, HiddenError>,
+    map: projected_graph::MapHolder<u64, String, HiddenError>,
+}
+
+#[test]
+fn nested_models_project_indirect_and_cyclic_parameters() {
+    projected_graph::verify();
+    across_modules::verify();
+    duplicate_names::verify();
+    let map = PlainMapHolder::<u64, String, HiddenError>::export_to_string().unwrap();
+    assert!(
+        map.contains("class PlainMapHolder(Generic[K, V]):"),
+        "{map}"
+    );
+    assert!(map.contains("map: dict[K, V]"), "{map}");
+
+    #[cfg(feature = "indexmap-impl")]
+    {
+        let indexed = IndexedMapHolder::<u64, String, HiddenError>::export_to_string().unwrap();
+        assert!(
+            indexed.contains("class IndexedMapHolder(Generic[K, V]):"),
+            "{indexed}"
+        );
+        assert!(indexed.contains("map: dict[K, V]"), "{indexed}");
+    }
+
+    #[cfg(feature = "chrono-impl")]
+    {
+        let datetime = DateTimeHolder::<chrono::Utc>::export_to_string().unwrap();
+        assert!(datetime.contains("class DateTimeHolder:"), "{datetime}");
+        assert!(datetime.contains("value: datetime.datetime"), "{datetime}");
+    }
+}
+
 #[test]
 fn generic_declarations_keep_symbolic_parameters() {
     let page = Page::<Item>::export_to_string().unwrap();
@@ -199,6 +463,14 @@ fn supports_as_concrete_and_explicit_bounds() {
         ConcretePage::<NotPython, Item>::inline(),
         "ConcretePage[Item]"
     );
+    assert_eq!(
+        ConcretePage::<NotPython, Item>::type_spec_with(&[
+            rust_py_models::TypeSpec::named("ignored"),
+            rust_py_models::TypeSpec::named("Item"),
+        ])
+        .annotation(),
+        "ConcretePage[Item]"
+    );
 
     assert!(ExplicitBound::<Item>::export_to_string()
         .unwrap()
@@ -214,6 +486,47 @@ fn supports_as_concrete_and_explicit_bounds() {
         "T"
     );
     assert!(TransparentId::model_spec().unwrap().is_none());
+}
+
+#[test]
+fn result_error_generic_is_absent_from_python_model() {
+    assert_eq!(
+        ResultPage::<Item, HiddenError>::inline(),
+        "ResultPage[Item]"
+    );
+    assert_eq!(
+        ResultPage::<Item, HiddenError>::type_spec_with(&[
+            rust_py_models::TypeSpec::named("Item"),
+            rust_py_models::TypeSpec::named("ignored"),
+        ])
+        .annotation(),
+        "ResultPage[Item]"
+    );
+    let page = ResultPage::<Item, HiddenError>::export_to_string().unwrap();
+    assert!(page.contains("class ResultPage(Generic[T]):"), "{page}");
+    assert!(page.contains("value: T"), "{page}");
+    assert!(page.contains("history: list[T]"), "{page}");
+    let root = ResultRoot::export_to_string().unwrap();
+    assert!(root.contains("page: ResultPage[Item]"), "{root}");
+    assert_eq!(ResultAlias::<HiddenError, Item>::inline(), "Item");
+    assert_eq!(
+        ResultAlias::<HiddenError, Item>::type_spec_with(&[
+            rust_py_models::TypeSpec::named("wrong"),
+            rust_py_models::TypeSpec::named("right"),
+        ])
+        .annotation(),
+        "right"
+    );
+    let visible_error = ResultWithError::<Item, String>::export_to_string().unwrap();
+    assert!(
+        visible_error.contains("class ResultWithError(Generic[T, E]):"),
+        "{visible_error}"
+    );
+    let choice = ResultChoice::<Item, HiddenError>::export_to_string().unwrap();
+    assert!(
+        choice.contains("class ResultChoiceReady(Generic[T]):"),
+        "{choice}"
+    );
 }
 
 #[test]

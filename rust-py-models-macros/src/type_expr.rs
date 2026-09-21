@@ -1,9 +1,10 @@
+use crate::projection::ProjectionMap;
 use proc_macro2::TokenStream as Tokens;
 use quote::quote;
 use std::collections::HashSet;
 use syn::{GenericArgument, PathArguments, Type};
 
-fn type_args(ty: &Type) -> Vec<&Type> {
+pub(crate) fn type_args(ty: &Type) -> Vec<&Type> {
     match ty {
         Type::Path(path) => path
             .path
@@ -31,7 +32,7 @@ fn type_args(ty: &Type) -> Vec<&Type> {
     }
 }
 
-fn is_param(ty: &Type, params: &HashSet<String>) -> Option<String> {
+pub(crate) fn is_param(ty: &Type, params: &HashSet<String>) -> Option<String> {
     if let Type::Path(path) = ty {
         if path.qself.is_none() && path.path.segments.len() == 1 {
             let segment = path.path.segments.first()?;
@@ -43,14 +44,15 @@ fn is_param(ty: &Type, params: &HashSet<String>) -> Option<String> {
     None
 }
 
-fn contains_param(ty: &Type, params: &HashSet<String>) -> bool {
+fn contains_param(ty: &Type, params: &HashSet<String>, projection: &ProjectionMap) -> bool {
     is_param(ty, params).is_some()
-        || type_args(ty)
+        || projection
+            .args(ty)
             .into_iter()
-            .any(|arg| contains_param(arg, params))
+            .any(|(used, arg)| used && contains_param(arg, params, projection))
 }
 
-pub(crate) fn symbolic(ty: &Type, params: &HashSet<String>) -> Tokens {
+pub(crate) fn symbolic(ty: &Type, params: &HashSet<String>, projection: &ProjectionMap) -> Tokens {
     if let Some(param) = is_param(ty, params) {
         return quote! {
             ::rust_py_models::TypeSpec::symbolic(
@@ -59,45 +61,64 @@ pub(crate) fn symbolic(ty: &Type, params: &HashSet<String>) -> Tokens {
             )
         };
     }
-    if !contains_param(ty, params) {
+    if !contains_param(ty, params, projection) {
         return quote! { <#ty as ::rust_py_models::PY>::type_spec() };
     }
     match ty {
-        Type::Paren(paren) => return symbolic(&paren.elem, params),
-        Type::Group(group) => return symbolic(&group.elem, params),
-        Type::Reference(reference) => return symbolic(&reference.elem, params),
+        Type::Paren(paren) => return symbolic(&paren.elem, params, projection),
+        Type::Group(group) => return symbolic(&group.elem, params, projection),
+        Type::Reference(reference) => return symbolic(&reference.elem, params, projection),
         _ => {}
     }
-    let args = type_args(ty)
+    let args = projection
+        .args(ty)
         .into_iter()
-        .map(|arg| symbolic(arg, params))
+        .map(|(used, arg)| {
+            if used {
+                symbolic(arg, params, projection)
+            } else {
+                quote! { ::rust_py_models::TypeSpec::named("__ignored") }
+            }
+        })
         .collect::<Vec<_>>();
     quote! { <#ty as ::rust_py_models::PY>::type_spec_with(&[#(#args),*]) }
 }
 
-pub(crate) fn concrete(ty: &Type, params: &HashSet<String>) -> Tokens {
+pub(crate) fn concrete(ty: &Type, params: &HashSet<String>, projection: &ProjectionMap) -> Tokens {
     if is_param(ty, params).is_some() {
         return quote! { <#ty as ::rust_py_models::PY>::type_spec() };
     }
     match ty {
-        Type::Paren(paren) => return concrete(&paren.elem, params),
-        Type::Group(group) => return concrete(&group.elem, params),
-        Type::Reference(reference) => return concrete(&reference.elem, params),
+        Type::Paren(paren) => return concrete(&paren.elem, params, projection),
+        Type::Group(group) => return concrete(&group.elem, params, projection),
+        Type::Reference(reference) => return concrete(&reference.elem, params, projection),
         _ => {}
     }
-    let args = type_args(ty)
+    let args = projection
+        .args(ty)
         .into_iter()
-        .map(|arg| concrete(arg, params))
+        .map(|(used, arg)| {
+            if used {
+                concrete(arg, params, projection)
+            } else {
+                quote! { ::rust_py_models::TypeSpec::named("__ignored") }
+            }
+        })
         .collect::<Vec<_>>();
     quote! { <#ty as ::rust_py_models::PY>::type_spec_with(&[#(#args),*]) }
 }
 
-pub(crate) fn supplied(ty: &Type, params: &[String]) -> Tokens {
+pub(crate) fn supplied(ty: &Type, params: &[String], projection: &ProjectionMap) -> Tokens {
     let params_set = params.iter().cloned().collect::<HashSet<_>>();
-    supplied_inner(ty, params, &params_set)
+    supplied_inner(ty, params, &params_set, projection)
 }
 
-fn supplied_inner(ty: &Type, params: &[String], params_set: &HashSet<String>) -> Tokens {
+fn supplied_inner(
+    ty: &Type,
+    params: &[String],
+    params_set: &HashSet<String>,
+    projection: &ProjectionMap,
+) -> Tokens {
     if let Some(param) = is_param(ty, params_set) {
         let index = params
             .iter()
@@ -106,14 +127,23 @@ fn supplied_inner(ty: &Type, params: &[String], params_set: &HashSet<String>) ->
         return quote! { args[#index].clone() };
     }
     match ty {
-        Type::Paren(paren) => return supplied_inner(&paren.elem, params, params_set),
-        Type::Group(group) => return supplied_inner(&group.elem, params, params_set),
-        Type::Reference(reference) => return supplied_inner(&reference.elem, params, params_set),
+        Type::Paren(paren) => return supplied_inner(&paren.elem, params, params_set, projection),
+        Type::Group(group) => return supplied_inner(&group.elem, params, params_set, projection),
+        Type::Reference(reference) => {
+            return supplied_inner(&reference.elem, params, params_set, projection)
+        }
         _ => {}
     }
-    let children = type_args(ty)
+    let children = projection
+        .args(ty)
         .into_iter()
-        .map(|arg| supplied_inner(arg, params, params_set))
+        .map(|(used, arg)| {
+            if used {
+                supplied_inner(arg, params, params_set, projection)
+            } else {
+                quote! { ::rust_py_models::TypeSpec::named("__ignored") }
+            }
+        })
         .collect::<Vec<_>>();
     quote! { <#ty as ::rust_py_models::PY>::type_spec_with(&[#(#children),*]) }
 }

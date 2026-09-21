@@ -15,8 +15,9 @@ pub(super) fn structure(
     name: &str,
     attr: &crate::attrs::Options,
     params: &[String],
+    projection: &crate::projection::ProjectionMap,
 ) -> syn::Result<ModelPieces> {
-    structure::render(data, name, attr, params)
+    structure::render(data, name, attr, params, projection)
 }
 
 pub(super) fn enumeration(
@@ -25,8 +26,9 @@ pub(super) fn enumeration(
     span: proc_macro2::Span,
     attr: &crate::attrs::Options,
     params: &[String],
+    projection: &crate::projection::ProjectionMap,
 ) -> syn::Result<ModelPieces> {
-    enumeration::render(data, name, span, attr, params)
+    enumeration::render(data, name, span, attr, params, projection)
 }
 
 pub(super) fn dataclass_options(options: crate::attrs::DataclassOptions) -> Tokens {

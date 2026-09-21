@@ -5,9 +5,19 @@ from __future__ import annotations
 from binding.AuditEvent import AuditEvent, AuditEventCreated, AuditEventMutable
 from binding.Event import Event, EventCreated, EventDeleted, EventMoved
 from binding.ImmutableUser import ImmutableUser
+from binding.Inner import Inner
+from binding.Item import Item
 from binding.Left import Left
+from binding.MapHolder import MapHolder
 from binding.models.Address import Address
+from binding.Nested import Nested
+from binding.Outer import Outer
 from binding.Page import Page
+from binding.ProjectedLeft import ProjectedLeft
+from binding.ProjectedRoot import ProjectedRoot
+from binding.ResultCoverage import ResultCoverage
+from binding.ResultPage import ResultPage
+from binding.ResultRoot import ResultRoot
 from binding.Right import Right
 from binding.Status import Status
 from binding.User import User
@@ -29,7 +39,31 @@ def valid_usage() -> None:
     left = Left(right=Right(left=None))
     immutable = ImmutableUser(id=1, name="Ada")
     mutable_event: AuditEvent = AuditEventMutable("value")
-    _ = (user, optional_address, page, left, immutable, mutable_event)
+    result = ResultCoverage(
+        item=Nested(id=1), items=[Nested(id=2)], optional=None, overridden="id"
+    )
+    result_page: ResultPage[Item] = ResultPage(value=Item(id=1), history=[])
+    result_root = ResultRoot(page=result_page)
+    projected_outer: Outer[Item] = Outer(inner=Inner(value=Item(id=1)))
+    projected_left: ProjectedLeft[Item] = ProjectedLeft(right=None)
+    projected_root = ProjectedRoot(
+        outer=projected_outer,
+        left=projected_left,
+        map=MapHolder(map={1: "x"}),
+    )
+    _ = (
+        user,
+        optional_address,
+        page,
+        left,
+        immutable,
+        mutable_event,
+        result,
+        result_root,
+        projected_outer,
+        projected_left,
+        projected_root,
+    )
 
 
 def event_user_id(event: Event) -> int | None:
@@ -41,6 +75,8 @@ def event_user_id(event: Event) -> int | None:
 def rejected_usage() -> None:
     # Each expected error must stay on its own line. An unused ignore fails mypy.
     Address(city=1, zip=None)  # type: ignore[arg-type]
+    ResultCoverage(item="wrong", items=[], optional=None, overridden="id")  # type: ignore[arg-type]
+    ResultPage[Item](value="wrong", history=[])  # type: ignore[arg-type]
     Address(city="Seoul")  # type: ignore[call-arg]
     EventCreated(user_id="wrong")  # type: ignore[arg-type]
     invalid_event: Event = Address(city="Seoul", zip=None)  # type: ignore[assignment]

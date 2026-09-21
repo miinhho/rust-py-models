@@ -1,9 +1,36 @@
 use crate::attrs::{options, Options, RenameRule};
+use crate::projection::ProjectionMap;
 use crate::python::python_ident;
 use proc_macro2::TokenStream as Tokens;
 use quote::quote;
 use std::collections::HashSet;
-use syn::{Field, Fields};
+use syn::{Field, Fields, Type};
+
+pub(crate) enum FieldProjection<'a> {
+    Omitted,
+    Unsafe {
+        annotation: &'a str,
+        import: Option<&'a str>,
+    },
+    Rust(&'a Type),
+}
+
+pub(crate) fn project_field<'a>(field: &'a Field, attr: &'a Options) -> FieldProjection<'a> {
+    if attr.is_skipped()
+        || (attr.unsafe_python_type.is_none()
+            && attr.as_type.is_none()
+            && is_phantom_data(&field.ty))
+    {
+        FieldProjection::Omitted
+    } else if let Some(annotation) = attr.unsafe_python_type.as_deref() {
+        FieldProjection::Unsafe {
+            annotation,
+            import: attr.import.as_deref(),
+        }
+    } else {
+        FieldProjection::Rust(attr.as_type.as_ref().unwrap_or(&field.ty))
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct FieldPieces {
@@ -17,17 +44,15 @@ pub(crate) fn fields(
     fields: &Fields,
     params: &HashSet<String>,
     rename_all: Option<RenameRule>,
+    mappings: &ProjectionMap,
 ) -> syn::Result<FieldPieces> {
     let mut out = FieldPieces::default();
     let mut names = HashSet::new();
     for (index, field) in fields.iter().enumerate() {
         let attr = options(&field.attrs)?;
         validate_options(field, &attr)?;
-        if attr.is_skipped()
-            || (attr.unsafe_python_type.is_none()
-                && attr.as_type.is_none()
-                && is_phantom_data(&field.ty))
-        {
+        let projection = project_field(field, &attr);
+        if matches!(projection, FieldProjection::Omitted) {
             continue;
         }
         if add_flattened_field(field, &attr, &mut out)? {
@@ -55,47 +80,42 @@ pub(crate) fn fields(
         }
         let documentation = option_string(&attr.documentation);
 
-        if let Some(python_type) = attr.unsafe_python_type {
-            if python_type.trim().is_empty() {
-                return Err(syn::Error::new_spanned(
-                    field,
-                    "empty unsafe Python type override",
-                ));
-            }
-            if let Some(module) = attr.import.as_deref() {
-                for part in module.split('.') {
-                    python_ident(part, proc_macro2::Span::call_site())?;
+        let (spec, hash_check) = match projection {
+            FieldProjection::Unsafe { annotation, import } => {
+                if annotation.trim().is_empty() {
+                    return Err(syn::Error::new_spanned(
+                        field,
+                        "empty unsafe Python type override",
+                    ));
                 }
-            }
-            let spec = if let Some(module) = attr.import {
-                quote! {
-                    ::rust_py_models::TypeSpec::unsafe_raw(#python_type).with_import(#module)
+                if let Some(module) = import {
+                    for part in module.split('.') {
+                        python_ident(part, proc_macro2::Span::call_site())?;
+                    }
                 }
-            } else {
-                quote! { ::rust_py_models::TypeSpec::unsafe_raw(#python_type) }
-            };
-            out.statements.push(quote! {
-                fields.push(
-                    ::rust_py_models::FieldSpec::new(#name, #spec)
-                        .with_documentation(#documentation)
-                );
-            });
-            out.specs.push(spec);
-            out.hash_checks.push(quote! { false });
-            continue;
-        }
-
-        let ty = attr.as_type.as_ref().unwrap_or(&field.ty);
-        let spec = crate::type_expr::symbolic(ty, params);
+                let spec = if let Some(module) = import {
+                    quote! {
+                        ::rust_py_models::TypeSpec::unsafe_raw(#annotation).with_import(#module)
+                    }
+                } else {
+                    quote! { ::rust_py_models::TypeSpec::unsafe_raw(#annotation) }
+                };
+                (spec, quote! { false })
+            }
+            FieldProjection::Rust(ty) => (
+                crate::type_expr::symbolic(ty, params, mappings),
+                quote! { <#ty as ::rust_py_models::PY>::is_hashable() },
+            ),
+            FieldProjection::Omitted => unreachable!("omitted fields are skipped above"),
+        };
         out.statements.push(quote! {
             fields.push(
                 ::rust_py_models::FieldSpec::new(#name, #spec)
                     .with_documentation(#documentation)
             );
         });
-        out.specs.push(quote! { #spec });
-        out.hash_checks
-            .push(quote! { <#ty as ::rust_py_models::PY>::is_hashable() });
+        out.specs.push(spec);
+        out.hash_checks.push(hash_check);
     }
     out.empty = out.statements.is_empty();
     Ok(out)

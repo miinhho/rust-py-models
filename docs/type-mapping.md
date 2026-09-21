@@ -18,6 +18,7 @@ Use this reference to determine the annotation emitted for a Rust field. Mapping
 | `Duration` | `datetime.timedelta` |
 | `SystemTime` | `datetime.datetime` |
 | `Option<T>` | `T | None` |
+| `Result<T, E>` | `T` |
 | `Vec<T>`, `LinkedList<T>`, `BinaryHeap<T>`, `[T]`, `&[T]` | `list[T]` |
 | `VecDeque<T>` | `collections.deque[T]` |
 | `HashSet<T, S>`, `BTreeSet<T>` | `set[T]` |
@@ -33,12 +34,17 @@ Use this reference to determine the annotation emitted for a Rust field. Mapping
 Python annotations do not carry these Rust constraints:
 
 - `Option<T>` accepts `None` but does not make a dataclass argument optional.
+- `Result<T, E>` emits the annotation for `T`; the annotation does not represent `E` or a Python `Result` object.
 - integer mappings do not enforce Rust ranges or nonzero constraints;
 - `char` does not enforce a one-character string;
 - arrays longer than 12 elements do not retain their exact length;
 - ownership, borrowing, locking, and `Cow` ownership state are not represented.
 
 The exporter rejects a set element or dictionary key when its generated Python type is known to be unhashable. A derived dataclass is hashable only when its dataclass options and fields make it hashable.
+
+Generic parameters unused by the generated Python shape are omitted, including parameters hidden through other derived models. This includes `E` used only as the error argument of `Result<T, E>` and `S` used only as the hasher argument of `HashMap<K, V, S>` or `HashSet<T, S>`. A parameter used by another Python field remains exposed. See [generics and documentation](generation.md#generics-and-documentation).
+
+This projection is transitive. If `Outer<T, E>` contains `Inner<T, E>` and `Inner` uses `E` only as the error type of `Result<T, E>`, both generated classes expose only `T`. Derived models can be connected across package modules and through explicit import aliases.
 
 ## Optional crate mappings
 
@@ -73,6 +79,6 @@ rust-py-models = { version = "0.1.1", features = ["chrono-impl", "uuid-impl"] }
 
 ## Types without a default mapping
 
-`Result<T, E>` and range types require an application-specific representation and therefore have no automatic mapping.
+Range types require an application-specific representation and therefore have no automatic mapping.
 
 Use `#[py(as = "RustType")]` to reuse an existing mapping. Use `#[py(unsafe_type = "...")]` only when you can supply any required Python imports and dependencies and accept that the annotation is unchecked. See [generation and export](generation.md#configure-generated-declarations) for these attributes.
