@@ -1,3 +1,4 @@
+use crate::projection::ProjectionMap;
 use proc_macro2::TokenStream as Tokens;
 use quote::quote;
 use std::collections::HashSet;
@@ -31,38 +32,6 @@ pub(crate) fn type_args(ty: &Type) -> Vec<&Type> {
     }
 }
 
-pub(crate) fn result_args(ty: &Type) -> Option<(&Type, &Type)> {
-    let Type::Path(path) = ty else {
-        return None;
-    };
-    if path.qself.is_some() {
-        return None;
-    }
-    let segments = path.path.segments.iter().collect::<Vec<_>>();
-    let is_result = match segments.as_slice() {
-        [result] => result.ident == "Result",
-        [root, module, result] => {
-            (root.ident == "std" || root.ident == "core")
-                && module.ident == "result"
-                && result.ident == "Result"
-        }
-        _ => false,
-    };
-    if !is_result {
-        return None;
-    }
-    let PathArguments::AngleBracketed(arguments) = &segments.last()?.arguments else {
-        return None;
-    };
-    let mut args = arguments.args.iter();
-    let (Some(GenericArgument::Type(ok)), Some(GenericArgument::Type(err)), None) =
-        (args.next(), args.next(), args.next())
-    else {
-        return None;
-    };
-    Some((ok, err))
-}
-
 pub(crate) fn is_param(ty: &Type, params: &HashSet<String>) -> Option<String> {
     if let Type::Path(path) = ty {
         if path.qself.is_none() && path.path.segments.len() == 1 {
@@ -75,17 +44,15 @@ pub(crate) fn is_param(ty: &Type, params: &HashSet<String>) -> Option<String> {
     None
 }
 
-fn contains_param(ty: &Type, params: &HashSet<String>) -> bool {
+fn contains_param(ty: &Type, params: &HashSet<String>, projection: &ProjectionMap) -> bool {
     is_param(ty, params).is_some()
-        || type_args(ty)
+        || projection
+            .args(ty)
             .into_iter()
-            .any(|arg| contains_param(arg, params))
+            .any(|(used, arg)| used && contains_param(arg, params, projection))
 }
 
-pub(crate) fn symbolic(ty: &Type, params: &HashSet<String>) -> Tokens {
-    if let Some((ok, _)) = result_args(ty) {
-        return symbolic(ok, params);
-    }
+pub(crate) fn symbolic(ty: &Type, params: &HashSet<String>, projection: &ProjectionMap) -> Tokens {
     if let Some(param) = is_param(ty, params) {
         return quote! {
             ::rust_py_models::TypeSpec::symbolic(
@@ -94,51 +61,64 @@ pub(crate) fn symbolic(ty: &Type, params: &HashSet<String>) -> Tokens {
             )
         };
     }
-    if !contains_param(ty, params) {
+    if !contains_param(ty, params, projection) {
         return quote! { <#ty as ::rust_py_models::PY>::type_spec() };
     }
     match ty {
-        Type::Paren(paren) => return symbolic(&paren.elem, params),
-        Type::Group(group) => return symbolic(&group.elem, params),
-        Type::Reference(reference) => return symbolic(&reference.elem, params),
+        Type::Paren(paren) => return symbolic(&paren.elem, params, projection),
+        Type::Group(group) => return symbolic(&group.elem, params, projection),
+        Type::Reference(reference) => return symbolic(&reference.elem, params, projection),
         _ => {}
     }
-    let args = type_args(ty)
+    let args = projection
+        .args(ty)
         .into_iter()
-        .map(|arg| symbolic(arg, params))
+        .map(|(used, arg)| {
+            if used {
+                symbolic(arg, params, projection)
+            } else {
+                quote! { ::rust_py_models::TypeSpec::named("__ignored") }
+            }
+        })
         .collect::<Vec<_>>();
     quote! { <#ty as ::rust_py_models::PY>::type_spec_with(&[#(#args),*]) }
 }
 
-pub(crate) fn concrete(ty: &Type, params: &HashSet<String>) -> Tokens {
-    if let Some((ok, _)) = result_args(ty) {
-        return concrete(ok, params);
-    }
+pub(crate) fn concrete(ty: &Type, params: &HashSet<String>, projection: &ProjectionMap) -> Tokens {
     if is_param(ty, params).is_some() {
         return quote! { <#ty as ::rust_py_models::PY>::type_spec() };
     }
     match ty {
-        Type::Paren(paren) => return concrete(&paren.elem, params),
-        Type::Group(group) => return concrete(&group.elem, params),
-        Type::Reference(reference) => return concrete(&reference.elem, params),
+        Type::Paren(paren) => return concrete(&paren.elem, params, projection),
+        Type::Group(group) => return concrete(&group.elem, params, projection),
+        Type::Reference(reference) => return concrete(&reference.elem, params, projection),
         _ => {}
     }
-    let args = type_args(ty)
+    let args = projection
+        .args(ty)
         .into_iter()
-        .map(|arg| concrete(arg, params))
+        .map(|(used, arg)| {
+            if used {
+                concrete(arg, params, projection)
+            } else {
+                quote! { ::rust_py_models::TypeSpec::named("__ignored") }
+            }
+        })
         .collect::<Vec<_>>();
     quote! { <#ty as ::rust_py_models::PY>::type_spec_with(&[#(#args),*]) }
 }
 
-pub(crate) fn supplied(ty: &Type, params: &[String]) -> Tokens {
+pub(crate) fn supplied(ty: &Type, params: &[String], projection: &ProjectionMap) -> Tokens {
     let params_set = params.iter().cloned().collect::<HashSet<_>>();
-    supplied_inner(ty, params, &params_set)
+    supplied_inner(ty, params, &params_set, projection)
 }
 
-fn supplied_inner(ty: &Type, params: &[String], params_set: &HashSet<String>) -> Tokens {
-    if let Some((ok, _)) = result_args(ty) {
-        return supplied_inner(ok, params, params_set);
-    }
+fn supplied_inner(
+    ty: &Type,
+    params: &[String],
+    params_set: &HashSet<String>,
+    projection: &ProjectionMap,
+) -> Tokens {
     if let Some(param) = is_param(ty, params_set) {
         let index = params
             .iter()
@@ -147,14 +127,23 @@ fn supplied_inner(ty: &Type, params: &[String], params_set: &HashSet<String>) ->
         return quote! { args[#index].clone() };
     }
     match ty {
-        Type::Paren(paren) => return supplied_inner(&paren.elem, params, params_set),
-        Type::Group(group) => return supplied_inner(&group.elem, params, params_set),
-        Type::Reference(reference) => return supplied_inner(&reference.elem, params, params_set),
+        Type::Paren(paren) => return supplied_inner(&paren.elem, params, params_set, projection),
+        Type::Group(group) => return supplied_inner(&group.elem, params, params_set, projection),
+        Type::Reference(reference) => {
+            return supplied_inner(&reference.elem, params, params_set, projection)
+        }
         _ => {}
     }
-    let children = type_args(ty)
+    let children = projection
+        .args(ty)
         .into_iter()
-        .map(|arg| supplied_inner(arg, params, params_set))
+        .map(|(used, arg)| {
+            if used {
+                supplied_inner(arg, params, params_set, projection)
+            } else {
+                quote! { ::rust_py_models::TypeSpec::named("__ignored") }
+            }
+        })
         .collect::<Vec<_>>();
     quote! { <#ty as ::rust_py_models::PY>::type_spec_with(&[#(#children),*]) }
 }

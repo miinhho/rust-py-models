@@ -1,7 +1,8 @@
 use crate::attrs::{options, Options};
 use crate::fields::{project_field, FieldProjection};
+use crate::projection::ProjectionMap;
 use crate::python::python_class_ident;
-use crate::type_expr::{is_param, result_args, type_args};
+use crate::type_expr::is_param;
 use proc_macro2::TokenStream as Tokens;
 use quote::quote;
 use std::collections::{HashMap, HashSet};
@@ -22,7 +23,13 @@ struct ExposedParam {
 }
 
 impl GenericInfo {
-    pub(crate) fn parse(original: &Generics, options: &Options, data: &Data) -> syn::Result<Self> {
+    pub(crate) fn parse(
+        original: &Generics,
+        options: &Options,
+        data: &Data,
+        projection: &ProjectionMap,
+        projected_names: Option<&HashSet<String>>,
+    ) -> syn::Result<Self> {
         if let Some(param) = original
             .params
             .iter()
@@ -55,14 +62,17 @@ impl GenericInfo {
             }
         }
 
-        // Error-only parameters have no Python representation and need no PY bound.
-        let hidden = hidden_result_error_params(data, options, &declared)?;
+        let visible = if let Some(names) = projected_names {
+            names.clone()
+        } else {
+            visible_params(data, options, &declared, projection)?
+        };
         let mut impl_generics = original.clone();
         let exposed_params = original
             .type_params()
             .enumerate()
             .filter(|(index, _)| {
-                !concrete.contains_key(&all_names[*index]) && !hidden.contains(&all_names[*index])
+                !concrete.contains_key(&all_names[*index]) && visible.contains(&all_names[*index])
             })
             .map(|(rust_index, param)| ExposedParam {
                 ident: param.ident.clone(),
@@ -140,20 +150,20 @@ impl GenericInfo {
     }
 }
 
-fn hidden_result_error_params(
+pub(crate) fn visible_params(
     data: &Data,
     container: &Options,
     declared: &HashSet<String>,
+    projection: &ProjectionMap,
 ) -> syn::Result<HashSet<String>> {
     let mut visible = HashSet::new();
-    let mut error_only = HashSet::new();
     if let Some(ty) = &container.as_type {
-        collect_usage(ty, declared, &mut visible, &mut error_only, Usage::Visible);
+        collect_usage(ty, declared, projection, &mut visible);
     } else {
         let mut visit_field = |field: &Field| -> syn::Result<()> {
             let attr = options(&field.attrs)?;
             if let FieldProjection::Rust(ty) = project_field(field, &attr) {
-                collect_usage(ty, declared, &mut visible, &mut error_only, Usage::Visible);
+                collect_usage(ty, declared, projection, &mut visible);
             }
             Ok(())
         };
@@ -175,38 +185,20 @@ fn hidden_result_error_params(
             Data::Union(_) => {}
         }
     }
-    Ok(error_only.difference(&visible).cloned().collect())
-}
-
-#[derive(Clone, Copy)]
-enum Usage {
-    Visible,
-    Error,
+    Ok(visible)
 }
 
 fn collect_usage(
     ty: &Type,
     declared: &HashSet<String>,
+    projection: &ProjectionMap,
     visible: &mut HashSet<String>,
-    error_only: &mut HashSet<String>,
-    usage: Usage,
 ) {
-    if matches!(usage, Usage::Visible) {
-        if let Some((ok, err)) = result_args(ty) {
-            collect_usage(ok, declared, visible, error_only, Usage::Visible);
-            collect_usage(err, declared, visible, error_only, Usage::Error);
-            return;
-        }
-    }
     if let Some(param) = is_param(ty, declared) {
-        let target = match usage {
-            Usage::Visible => &mut *visible,
-            Usage::Error => &mut *error_only,
-        };
-        target.insert(param);
+        visible.insert(param);
     }
-    for arg in type_args(ty) {
-        collect_usage(arg, declared, visible, error_only, usage);
+    for (_, arg) in projection.args(ty).into_iter().filter(|(used, _)| *used) {
+        collect_usage(arg, declared, projection, visible);
     }
 }
 
